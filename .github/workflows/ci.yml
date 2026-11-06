@@ -14,11 +14,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # arm64: Windows is cross-compiled on the x64 runner (tests run on x64 only);
+        # Linux builds natively on GitHub's arm runner.
         include:
           - os: windows-latest
+            arch: x64
             bundles: nsis
+            target: ''
+          - os: windows-latest
+            arch: arm64
+            bundles: nsis
+            target: aarch64-pc-windows-msvc
           - os: ubuntu-22.04
+            arch: x64
             bundles: deb,appimage
+            target: ''
+          - os: ubuntu-22.04-arm
+            arch: arm64
+            bundles: deb,appimage
+            target: ''
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +44,11 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.arch }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -45,17 +63,18 @@ jobs:
           npm run build
 
       - name: Rust tests
+        if: matrix.target == ''
         run: cargo test --workspace
 
       - name: Bundle
         working-directory: app
-        run: npx --prefix ../ui tauri build --bundles ${{ matrix.bundles }}
+        run: npx --prefix ../ui tauri build --bundles ${{ matrix.bundles }} ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ai-launcher-${{ runner.os }}
+          name: ai-launcher-${{ runner.os }}-${{ matrix.arch }}
           path: |
-            target/release/bundle/nsis/*.exe
-            target/release/bundle/deb/*.deb
-            target/release/bundle/appimage/*.AppImage
+            target/**/release/bundle/nsis/*.exe
+            target/**/release/bundle/deb/*.deb
+            target/**/release/bundle/appimage/*.AppImage
           if-no-files-found: ignore

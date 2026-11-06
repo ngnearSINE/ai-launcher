@@ -71,10 +71,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Every platform adds its entry to the same latest.json, so installed copies on x64 and
+        # arm64 both find their update. Windows arm64 is cross-compiled on the x64 runner.
         include:
           - os: windows-latest
+            arch: x64
+            target: ''
             args: --bundles nsis
+          - os: windows-latest
+            arch: arm64
+            target: aarch64-pc-windows-msvc
+            args: --bundles nsis --target aarch64-pc-windows-msvc
           - os: ubuntu-22.04
+            arch: x64
+            target: ''
+            args: --bundles deb,appimage
+          - os: ubuntu-22.04-arm
+            arch: arm64
+            target: ''
             args: --bundles deb,appimage
     runs-on: ${{ matrix.os }}
     steps:
@@ -89,7 +103,11 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.arch }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -126,7 +144,7 @@ jobs:
           id="${{ needs.create-release.outputs.release_id }}"
           names=$(gh api "repos/${{ github.repository }}/releases/$id" --jq '.assets[].name')
           echo "$names"
-          for want in 'latest.json' '-setup.exe' '.AppImage' '.deb'; do
+          for want in 'latest.json' '_x64-setup.exe' '_arm64-setup.exe' '_amd64.AppImage' '_aarch64.AppImage' '_amd64.deb' '_arm64.deb'; do
             echo "$names" | grep -Fq -- "$want" || { echo "::error::missing $want, not publishing"; exit 1; }
           done
           gh api -X PATCH "repos/${{ github.repository }}/releases/$id" -F draft=false -f make_latest=true >/dev/null

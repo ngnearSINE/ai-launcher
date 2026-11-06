@@ -3,8 +3,14 @@
 | OS | 파일 · File | 자동 업데이트 · Auto-update |
 | --- | --- | --- |
 | Windows 10/11 (x64) | `AI.Launcher_{version}_x64-setup.exe` | ✓ |
+| Windows 11 (arm64) | `AI.Launcher_{version}_arm64-setup.exe` | ✓ |
 | Ubuntu 22.04+ (x64) | `AI.Launcher_{version}_amd64.AppImage` | ✓ |
 | Ubuntu 22.04+ (x64) | `AI.Launcher_{version}_amd64.deb` (`sudo apt install ./…deb`) | apt |
+| Ubuntu 22.04+ (arm64) | `AI.Launcher_{version}_aarch64.AppImage` | ✓ |
+| Ubuntu 22.04+ (arm64) | `AI.Launcher_{version}_arm64.deb` (`sudo apt install ./…deb`) | apt |
+
+- 내 PC 종류 확인: Windows는 설정 → 시스템 → 정보의 「시스템 종류」(ARM 기반이면 arm64), Ubuntu는 터미널에서 `uname -m`(`x86_64`면 x64, `aarch64`면 arm64).
+- Which one: on Windows see Settings → System → About → "System type" (ARM-based → arm64); on Ubuntu run `uname -m` (`x86_64` → x64, `aarch64` → arm64).
 
 - Windows 설치 파일은 관리자 권한 없이 현재 사용자에게 설치됩니다. 처음 실행할 때 SmartScreen 경고가 뜨면 「추가 정보 → 실행」을 누르세요(코드 서명 인증서 없음).
 - The Windows installer installs per user without admin rights. If SmartScreen warns on first run, choose "More info → Run anyway" (no code-signing certificate).

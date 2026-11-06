@@ -1,9 +1,15 @@
 //! Tray icon: left click opens the quick panel (or the main window), right click shows a menu
 //! with every instance so one can be started without opening any window.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+
+use parking_lot::Mutex;
 use tauri::menu::{Menu, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Wry};
+
+use crate::updater::UpdateState;
 
 use crate::core::Core;
 use crate::i18n::{lang, t};
@@ -18,20 +24,7 @@ pub fn build(app: &AppHandle, core: &Core) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| on_menu(app, event.id.as_ref()))
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, rect, .. } = event {
-                let app = tray.app_handle();
-                let Some(core) = app.try_state::<std::sync::Arc<Core>>() else { return };
-                if core.settings().tray_left_click == "main" {
-                    crate::windows::show_main(app);
-                } else {
-                    let scale = app.get_webview_window("main").and_then(|w| w.scale_factor().ok()).unwrap_or(1.0);
-                    let pos = rect.position.to_physical::<f64>(scale);
-                    let size = rect.size.to_physical::<f64>(scale);
-                    crate::windows::toggle_quick(app, Some((pos.x, pos.y, size.width, size.height)));
-                }
-            }
-        })
+        .on_tray_icon_event(|tray, event| on_tray(tray.app_handle(), event))
         .build(app)?;
     Ok(())
 }
@@ -64,7 +57,13 @@ fn menu(app: &AppHandle, core: &Core) -> tauri::Result<Menu<Wry>> {
         sub = sub.item(&MenuItem::with_id(app, format!("inst:{id}"), text, true, None::<&str>)?);
     }
     let float_label = if settings.float_enabled { t(l, "float.hide") } else { t(l, "float.show") };
-    MenuBuilder::new(app)
+    let mut builder = MenuBuilder::new(app);
+    if let UpdateState::Ready { version, .. } = &*core.update.lock() {
+        builder = builder
+            .item(&MenuItem::with_id(app, "update", t(l, "update.install").replace("{v}", version), true, None::<&str>)?)
+            .item(&PredefinedMenuItem::separator(app)?);
+    }
+    builder
         .item(&MenuItem::with_id(app, "open", t(l, "open"), true, None::<&str>)?)
         .item(&MenuItem::with_id(app, "quick", t(l, "quick"), true, None::<&str>)?)
         .item(&PredefinedMenuItem::separator(app)?)
@@ -75,6 +74,69 @@ fn menu(app: &AppHandle, core: &Core) -> tauri::Result<Menu<Wry>> {
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItem::with_id(app, "quit", t(l, "quit"), true, None::<&str>)?)
         .build()
+}
+
+/// Tray clicks. A double click arrives as click → double-click → click, so a single click is
+/// acted on only after the double-click interval passes without a double click, and the click
+/// that trails a double click is ignored.
+static CLICK_GEN: AtomicU64 = AtomicU64::new(0);
+static LAST_DOUBLE: Mutex<Option<Instant>> = Mutex::new(None);
+
+fn double_click_ms() -> u64 {
+    #[cfg(windows)]
+    {
+        extern "system" {
+            fn GetDoubleClickTime() -> u32;
+        }
+        (unsafe { GetDoubleClickTime() } as u64).clamp(200, 500)
+    }
+    #[cfg(not(windows))]
+    {
+        300
+    }
+}
+
+fn run_action(app: &AppHandle, action: &str, anchor: Option<(f64, f64, f64, f64)>) {
+    match action {
+        "main" => crate::windows::show_main(app),
+        "quick" | "popup" => crate::windows::toggle_quick(app, anchor),
+        _ => {}
+    }
+}
+
+fn on_tray(app: &AppHandle, event: TrayIconEvent) {
+    let Some(core) = app.try_state::<std::sync::Arc<Core>>() else { return };
+    let s = core.settings();
+    match event {
+        TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => {
+            CLICK_GEN.fetch_add(1, Ordering::SeqCst);
+            *LAST_DOUBLE.lock() = Some(Instant::now());
+            run_action(app, &s.tray_double_click, None);
+        }
+        TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, rect, .. } => {
+            if LAST_DOUBLE.lock().map(|t| t.elapsed() < Duration::from_millis(600)).unwrap_or(false) {
+                return;
+            }
+            let scale = app.get_webview_window("main").and_then(|w| w.scale_factor().ok()).unwrap_or(1.0);
+            let pos = rect.position.to_physical::<f64>(scale);
+            let size = rect.size.to_physical::<f64>(scale);
+            let anchor = Some((pos.x, pos.y, size.width, size.height));
+            let action = s.tray_left_click.clone();
+            if s.tray_double_click == "none" {
+                return run_action(app, &action, anchor);
+            }
+            let gen = CLICK_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+            let app = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(double_click_ms()));
+                if CLICK_GEN.load(Ordering::SeqCst) == gen {
+                    let a = app.clone();
+                    let _ = app.run_on_main_thread(move || run_action(&a, &action, anchor));
+                }
+            });
+        }
+        _ => {}
+    }
 }
 
 pub fn refresh(app: &AppHandle, core: &Core) {
@@ -103,6 +165,11 @@ fn on_menu(app: &AppHandle, id: &str) {
             crate::windows::sync_float(app, &core);
         }
         "quit" => app.exit(0),
+        "update" => {
+            tauri::async_runtime::spawn(async move {
+                crate::updater::install(&core).await;
+            });
+        }
         other => {
             if let Some(inst) = other.strip_prefix("inst:") {
                 if let Err(e) = core.launch(inst) {

@@ -19,6 +19,17 @@ pub struct Snapshot {
     pub instances: Vec<InstanceView>,
     pub presets: Vec<PresetView>,
     pub config_dir: String,
+    pub update: crate::updater::UpdateState,
+    /// Installed browser web apps not yet in the launcher (offered in "Add app").
+    pub available_web_apps: Vec<WebAppView>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebAppView {
+    pub app_id: String,
+    pub name: String,
+    pub profile: String,
 }
 
 #[derive(Serialize)]
@@ -100,11 +111,7 @@ pub fn build(core: &Core) -> Snapshot {
         .map(|inst| {
             let eff = effective(&data.settings, inst);
             let run = runtime.by_instance.get(&inst.id);
-            let install = data.installations.iter().find(|i| i.id == inst.installation_id);
-            let dir = inst.profile.dir().cloned().or_else(|| {
-                let i = install?;
-                core.registry.get(&i.adapter)?.default_profile_dir(i, &core.env)
-            });
+            let dir = launcher_core::catalog::physical_profile_dir(data, &core.registry, &core.env, inst);
             InstanceView {
                 effective: EffectiveView {
                     taskbar_separate: eff.taskbar_separate,
@@ -138,5 +145,13 @@ pub fn build(core: &Core) -> Snapshot {
         instances,
         presets: PRESETS.iter().map(|p| PresetView { id: p.id, name: p.name, url: p.url, logo: p.logo, color: p.color }).collect(),
         config_dir: core.config_dir.display().to_string(),
+        update: core.update.lock().clone(),
+        available_web_apps: core
+            .web_apps
+            .lock()
+            .iter()
+            .filter(|p| !data.installations.iter().any(|i| i.id == format!("pwa:{}", p.app_id)))
+            .map(|p| WebAppView { app_id: p.app_id.clone(), name: p.name.clone(), profile: p.profile_directory.clone() })
+            .collect(),
     }
 }

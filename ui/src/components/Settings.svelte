@@ -1,5 +1,7 @@
 <script lang="ts">
   import { open, save } from '@tauri-apps/plugin-dialog'
+  import { openUrl } from '@tauri-apps/plugin-opener'
+  import { ago } from '../lib/format'
   import { api } from '../lib/api'
   import { t } from '../lib/i18n.svelte'
   import { confirmBox, dialogs, run, settings, ui } from '../lib/state.svelte'
@@ -8,6 +10,33 @@
   import { ColorPick, HotkeyInput, Row, Segmented, Switch } from './controls'
 
   const s = $derived(settings())
+  const up = $derived(ui.snap!.update)
+  const updateText = $derived.by(() => {
+    switch (up.status) {
+      case 'unsupported':
+        return up.reason === 'portable'
+          ? t('설치하지 않은 실행 파일이라 자동 업데이트가 꺼져 있어요. 설치 파일로 설치하면 켜져요.')
+          : up.reason === 'package'
+            ? t('패키지 관리자(apt)로 설치한 버전은 시스템 업데이트로 갱신돼요')
+            : up.reason === 'dev'
+              ? t('개발 빌드는 자동 업데이트를 하지 않아요')
+              : t('이 OS에서는 자동 업데이트를 지원하지 않아요')
+      case 'checking':
+        return t('확인하는 중…')
+      case 'latest':
+        return t('최신 버전이에요 · {time}', { time: ago(up.checkedAt, ui.now) })
+      case 'downloading':
+        return t('v{v} 받는 중 {p}%', { v: up.version, p: up.percent })
+      case 'ready':
+        return t('v{v}을 받았어요. 다시 시작하면 설치돼요', { v: up.version })
+      case 'installing':
+        return t('설치하는 중…')
+      case 'error':
+        return up.message === 'network' ? t('인터넷에 연결할 수 없어요') : t('업데이트를 확인하지 못했어요')
+      default:
+        return t('아직 확인하지 않았어요')
+    }
+  })
   function set<K extends keyof S>(key: K, value: S[K]) {
     run(api.updateSettings({ [key]: value } as Partial<S>))
   }
@@ -97,10 +126,22 @@
       <Row label={t('강조색')} stack>
         <ColorPick value={s.accent} onchange={(c) => set('accent', c)} />
       </Row>
-      <Row label={t('유리 효과')} desc={t('창 배경에 Windows Mica·아크릴 효과를 씁니다')}>
-        <Switch checked={s.glass} onchange={(v) => set('glass', v)} />
+      <Row label={t('창 배경 효과')} desc={t('Windows가 창 뒤를 비춰 보이게 하는 소재예요. Mica Alt는 배경화면 색이 은은하게, 아크릴은 뒤의 창까지 흐리게 비쳐요.')}>
+        <select
+          class="select w"
+          value={s.glass ? s.backgroundEffect : 'none'}
+          onchange={(e) => {
+            const v = (e.target as HTMLSelectElement).value as S['backgroundEffect']
+            run(api.updateSettings({ glass: v !== 'none', backgroundEffect: v }))
+          }}
+        >
+          <option value="tabbed">Mica Alt</option>
+          <option value="mica">Mica</option>
+          <option value="acrylic">{t('아크릴')}</option>
+          <option value="none">{t('없음 (불투명)')}</option>
+        </select>
       </Row>
-      <Row label={t('유리 효과 강도')} desc={`${s.glassStrength}`}>
+      <Row label={t('투명도')} desc={`${s.glassStrength}% · ${t('높을수록 배경 효과가 더 비쳐요')}`}>
         <input type="range" min="0" max="100" value={s.glassStrength} disabled={!s.glass} onchange={(e) => set('glassStrength', +(e.target as HTMLInputElement).value)} />
       </Row>
       <Row label={t('카드 밀도')}>
@@ -124,11 +165,38 @@
         <Switch checked={s.bestClaudeHotkeyEnabled} onchange={(v) => set('bestClaudeHotkeyEnabled', v)} />
       </Row>
       <Row label={t('트레이 아이콘 클릭')}>
-        <Segmented value={s.trayLeftClick} onchange={(v) => set('trayLeftClick', v)} options={[{ value: 'popup', label: t('빠른 실행') }, { value: 'main', label: t('메인 창') }]} />
+        <Segmented value={s.trayLeftClick} onchange={(v) => set('trayLeftClick', v)} options={[{ value: 'popup', label: t('빠른 실행') }, { value: 'main', label: t('관리 창') }]} />
+      </Row>
+      <Row label={t('트레이 아이콘 더블클릭')} desc={t('더블클릭을 쓰면 한 번 클릭은 더블클릭 간격만큼 기다렸다 동작해요')}>
+        <Segmented value={s.trayDoubleClick} onchange={(v) => set('trayDoubleClick', v)} options={[{ value: 'main', label: t('관리 창') }, { value: 'quick', label: t('빠른 실행') }, { value: 'none', label: t('사용 안 함') }]} />
       </Row>
       <h2>{t('플로팅 런처')}</h2>
+      <div class="tip">
+        <Icon name="float" size={14} />
+        <span>{t('런처 창 제목줄의 플로팅 단추나 단축키로 언제든 전환해요. 플로팅에서는 위쪽 ↗ 단추나 빈 곳 더블클릭으로 런처 창에 돌아와요.')}</span>
+      </div>
       <Row label={t('플로팅 런처 표시')} desc={t('화면 가장자리에 떠 있는 작은 아이콘 줄')}>
         <Switch checked={s.floatEnabled} onchange={(v) => set('floatEnabled', v)} />
+      </Row>
+      <Row label={t('런처 창 ⇄ 플로팅 전환 단축키')}>
+        <HotkeyInput value={s.floatHotkey} onchange={(v) => set('floatHotkey', v)} />
+        <Switch checked={s.floatHotkeyEnabled} onchange={(v) => set('floatHotkeyEnabled', v)} />
+      </Row>
+      <Row label={t('전환할 때')} desc={t('「한쪽만 보이기」는 한쪽을 열면 다른 쪽을 숨겨요')}>
+        <Segmented value={s.floatSwitch} onchange={(v) => set('floatSwitch', v)} options={[{ value: 'swap', label: t('한쪽만 보이기') }, { value: 'both', label: t('둘 다 두기') }]} />
+      </Row>
+      <Row label={t('사용량 고리')} desc={t('「둘 다」는 바깥 고리가 주간, 안쪽 고리가 5시간이에요. 흰 눈금은 고르게 썼을 때의 위치예요.')} stack>
+        <Segmented
+          value={s.floatRing}
+          onchange={(v) => set('floatRing', v)}
+          options={[
+            { value: 'both', label: t('둘 다') },
+            { value: 'tight', label: t('더 빠듯한 쪽') },
+            { value: '5h', label: t('5시간') },
+            { value: 'weekly', label: t('주간') },
+            { value: 'none', label: t('끄기') },
+          ]}
+        />
       </Row>
       <Row label={t('방향')}>
         <Segmented value={s.floatOrientation} onchange={(v) => set('floatOrientation', v)} options={[{ value: 'vertical', label: t('세로') }, { value: 'horizontal', label: t('가로') }]} />
@@ -141,9 +209,6 @@
       </Row>
       <Row label={t('항상 위에')}>
         <Switch checked={s.floatAlwaysOnTop} onchange={(v) => set('floatAlwaysOnTop', v)} />
-      </Row>
-      <Row label={t('사용량 고리 표시')} desc={t('아이콘 둘레에 5시간·주간 중 높은 쪽')}>
-        <Switch checked={s.floatShowUsage} onchange={(v) => set('floatShowUsage', v)} />
       </Row>
       <Row label={t('위치 초기화')}>
         <button class="btn sm" onclick={() => set('floatPosition', null)}>{t('초기화')}</button>
@@ -179,6 +244,12 @@
       </Row>
       <Row label={t('새로고침 주기')} desc={t('{n}분 (서비스 요청 제한 때문에 2분보다 짧게는 묻지 않아요)', { n: s.usageRefreshMinutes })}>
         <input type="range" min="2" max="60" value={s.usageRefreshMinutes} onchange={(e) => set('usageRefreshMinutes', +(e.target as HTMLInputElement).value)} />
+      </Row>
+      <Row label={t('숫자와 막대')} desc={t('남은 양을 보여 줄지 쓴 양을 보여 줄지 골라요')}>
+        <Segmented value={s.usageValue} onchange={(v) => set('usageValue', v)} options={[{ value: 'left', label: t('남은 양') }, { value: 'used', label: t('쓴 양') }]} />
+      </Row>
+      <Row label={t('페이스 눈금')} desc={t('기간 동안 고르게 썼다면 지금 있어야 할 위치를 흰 눈금으로 표시해요')}>
+        <Switch checked={s.usageShowPace} onchange={(v) => set('usageShowPace', v)} />
       </Row>
       <Row label={t('초기화까지 남은 시간 표시')}>
         <Switch checked={s.usageShowReset} onchange={(v) => set('usageShowReset', v)} />
@@ -265,6 +336,40 @@
         </div>
       </div>
       <p class="lead">{t('여러 계정의 AI 데스크톱 앱을 나란히 띄우는 런처. 각 인스턴스는 자기 데이터 폴더를 쓰고, 사용량은 그 폴더의 로그인으로만 조회합니다.')}</p>
+      <h2>{t('업데이트')}</h2>
+      <div class="upd">
+        <div class="upd-state">
+          <span class="dot {up.status}"></span>
+          <span>{updateText}</span>
+        </div>
+        {#if up.status === 'downloading'}
+          <span class="bar"><span class="fill" style:width="{up.percent}%"></span></span>
+        {/if}
+        <div class="upd-actions">
+          {#if up.status === 'ready'}
+            <button class="btn sm primary" onclick={() => run(api.installUpdate())}>{t('다시 시작해 업데이트')}</button>
+          {:else if up.status !== 'unsupported'}
+            <button class="btn sm" disabled={up.status === 'checking' || up.status === 'downloading' || up.status === 'installing'} onclick={() => run(api.checkUpdate())}>
+              <Icon name="refresh" size={13} /> {t('업데이트 확인')}
+            </button>
+          {/if}
+        </div>
+      </div>
+      {#if (up.status === 'ready' || up.status === 'downloading') && up.notes}
+        <pre class="notes">{up.notes}</pre>
+      {/if}
+      <Row label={t('업데이트 자동 확인')} desc={t('6시간마다 새 버전을 확인해 뒤에서 받아 둬요')}>
+        <Switch checked={s.checkUpdates} disabled={up.status === 'unsupported'} onchange={(v) => set('checkUpdates', v)} />
+      </Row>
+      <Row label={t('새벽에 자동 설치')} desc={t('받아 둔 업데이트를 {h}시에 설치하고 런처만 다시 시작해요. 실행 중인 앱은 닫히지 않아요.', { h: s.updateHour })}>
+        <select class="select hour" value={s.updateHour} disabled={!s.autoInstallUpdates || up.status === 'unsupported'} onchange={(e) => set('updateHour', +(e.target as HTMLSelectElement).value)}>
+          {#each Array.from({ length: 24 }, (_, i) => i) as h (h)}<option value={h}>{t('{h}시', { h })}</option>{/each}
+        </select>
+        <Switch checked={s.autoInstallUpdates} disabled={up.status === 'unsupported'} onchange={(v) => set('autoInstallUpdates', v)} />
+      </Row>
+      <Row label={t('릴리스 페이지')}>
+        <button class="btn sm" onclick={() => openUrl('https://github.com/ngnearSINE/ai-launcher/releases')}><Icon name="external" size={13} /> GitHub</button>
+      </Row>
       <Row label={t('종료')} desc={t('런처를 끝내도 실행 중인 앱은 그대로예요')}>
         <button class="btn sm" onclick={() => api.quitApp()}>{t('런처 종료')}</button>
       </Row>
@@ -447,6 +552,70 @@
   .btns {
     display: flex;
     gap: 8px;
+  }
+  .upd {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    margin: 8px 0 6px;
+    border-radius: var(--r-lg);
+    background: var(--well);
+  }
+  .upd-state {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-13);
+    min-width: 0;
+  }
+  .upd .dot {
+    width: 8px;
+    height: 8px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--text-3);
+  }
+  .upd .dot.latest {
+    background: var(--ok);
+  }
+  .upd .dot.ready,
+  .upd .dot.downloading,
+  .upd .dot.checking {
+    background: var(--accent);
+  }
+  .upd .dot.error {
+    background: var(--crit);
+  }
+  .upd .bar {
+    width: 120px;
+    height: 5px;
+    border-radius: 5px;
+    background: var(--track);
+    overflow: hidden;
+  }
+  .upd .fill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 300ms var(--ease);
+  }
+  .notes {
+    margin: 0 0 8px;
+    padding: 10px 12px;
+    max-height: 180px;
+    overflow: auto;
+    border-radius: var(--r-md);
+    background: var(--surface-2);
+    font-family: var(--font);
+    font-size: var(--fs-12);
+    color: var(--text-2);
+    white-space: pre-wrap;
+    user-select: text;
+  }
+  .hour {
+    width: 90px;
   }
   .about {
     display: flex;

@@ -8,7 +8,7 @@ use launcher_core::adapters::webapp::{preset_install, webapp_install, PRESETS};
 use launcher_core::catalog;
 use launcher_core::{new_id, Group, Installation, Instance, Settings};
 use serde_json::Value;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::core::Core;
 use crate::snapshot::{self, Snapshot};
@@ -52,7 +52,65 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         launch_best_claude,
         quit_app,
         app_icons,
+        check_update,
+        install_update,
+        add_installed_web_app,
+        switch_view,
+        fit_float,
     ]
+}
+
+/// The floating launcher's size for its content, kept on screen (logical px).
+#[tauri::command]
+async fn fit_float(app: AppHandle, width: f64, height: f64) -> Res<()> {
+    if let Some(w) = app.get_webview_window("float") {
+        crate::windows::fit_float(&w, width, height);
+    }
+    Ok(())
+}
+
+/// `to`: `float` or `main`. Async: it may create the floating window.
+#[tauri::command]
+async fn switch_view(app: AppHandle, core: State<'_, Arc<Core>>, to: String) -> Res<()> {
+    crate::windows::switch_view(&app, core.inner(), to == "float");
+    Ok(())
+}
+
+/// Adds an installed browser web app (from the Start menu) with its default instance.
+#[tauri::command]
+fn add_installed_web_app(core: C, app_id: String) -> Res<String> {
+    let p = core.web_apps.lock().iter().find(|p| p.app_id == app_id).cloned().ok_or("not-a-file")?;
+    core.mutate(true, |d| {
+        let browsers: Vec<Installation> = d.installations.iter().filter(|i| i.adapter == "chromium").cloned().collect();
+        let install = launcher_core::adapters::webapp::pwa_install(&p, &browsers, &core.env);
+        let id = install.id.clone();
+        d.dismissed.retain(|x| x != &id);
+        if !d.installations.iter().any(|i| i.id == id) {
+            let alias = install.name.clone();
+            d.installations.push(install);
+            catalog::create_instance(d, &core.registry, &core.env, &id, &alias, None, true)?;
+        }
+        Ok(id)
+    })
+}
+
+#[tauri::command]
+async fn check_update(core: State<'_, Arc<Core>>) -> Res<()> {
+    let core = core.inner().clone();
+    // A manual check clears a previous error or "latest" so it runs again.
+    {
+        let mut s = core.update.lock();
+        if matches!(*s, crate::updater::UpdateState::Error { .. } | crate::updater::UpdateState::Latest { .. }) {
+            *s = crate::updater::UpdateState::Idle;
+        }
+    }
+    crate::updater::check(&core, true).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn install_update(core: State<'_, Arc<Core>>) -> Res<bool> {
+    Ok(crate::updater::install(core.inner()).await)
 }
 
 #[tauri::command]
@@ -170,6 +228,9 @@ fn delete_instance(core: C, id: String, delete_data: bool) -> Res<Vec<String>> {
     }
     core.mutate(true, |d| {
         d.instances.retain(|i| i.id != id);
+        if !delete_data {
+            catalog::forget_profile(d, &core.env, &inst);
+        }
         Ok(())
     })?;
     let _ = std::fs::remove_file(crate::shortcuts::start_menu_path(&core, &inst));
@@ -353,7 +414,7 @@ async fn update_settings(app: AppHandle, core: State<'_, Arc<Core>>, patch: Valu
     if keys.iter().any(|k| k.starts_with("float")) {
         crate::windows::sync_float(&app, &core);
     }
-    if keys.iter().any(|k| *k == "glass" || *k == "theme") {
+    if keys.iter().any(|k| *k == "glass" || *k == "theme" || *k == "backgroundEffect") {
         crate::windows::apply_appearance(&app, &core);
     }
     if keys.contains(&"startWithOs") {

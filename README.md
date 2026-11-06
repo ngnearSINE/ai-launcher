@@ -5,18 +5,17 @@
 - **계정마다 한 인스턴스**: 인스턴스마다 데이터 폴더가 따로 있어 로그인이 섞이지 않습니다.
 - **작업 표시줄에 따로 고정**(Windows): 인스턴스마다 작업 표시줄 버튼이 따로 생기고, 각각 고정할 수 있습니다. 고정한 버튼은 그 인스턴스를 정확히 띄웁니다.
 - **사용량 카드**: Claude의 5시간·주간·모델별(예: Fable)·크레딧 사용량을 인스턴스 카드에 보여 줍니다. 사용량은 **그 인스턴스 프로필의 로그인으로만** 조회합니다.
-- **자동 검색 + 경로 등록**: 기본 위치에 설치된 Claude·Chrome·Edge·Orca·Cursor를 찾아 등록합니다. 다른 위치의 프로그램은 경로로 추가할 수 있습니다.
-- **웹앱**: Gemini·Grok·ChatGPT 같은 웹 서비스를 브라우저 앱 창으로 띄웁니다. 계정마다 독립된 브라우저 폴더를 씁니다.
-- **빠른 실행·트레이·플로팅 런처**: 전역 단축키(기본 `Alt+Shift+Space`)로 검색 → Enter. 트레이 메뉴에서 바로 실행할 수도 있고, 항상 위에 떠 있는 아이콘 줄도 켤 수 있습니다.
+- **자동 검색 + 경로 등록**: 기본 위치에 설치된 Claude·Orca·Cursor·Poe·Grok Bot과 Chrome에 설치한 AI 웹앱을 찾아 등록합니다. 다른 위치의 프로그램은 경로로 추가할 수 있습니다.
+- **웹앱**: Chrome에 설치한 Gemini·Grok 같은 웹앱은 평소 프로필 그대로 기본 인스턴스로 엽니다. 다른 계정은 독립된 브라우저 폴더의 앱 창으로 띄웁니다. Chrome·Edge 브라우저 자체는 카드로 보이지 않습니다.
+- **빠른 실행·트레이·플로팅 런처**: 전역 단축키(기본 `Alt+Shift+Space`)로 검색 → Enter. 트레이 메뉴에서 바로 실행할 수도 있고, 항상 위에 떠 있는 아이콘 줄(사용량 고리 표시)로 바꿔 쓸 수 있습니다. 관리 창과 플로팅은 제목줄 단추나 `Alt+Shift+F`로 오갑니다.
 
 ## 지원하는 앱
 
 | 종류 | 예 | 계정 분리 방법 |
 | --- | --- | --- |
 | Claude 데스크톱 | Windows Store판·설치판, Ubuntu `claude-desktop` | `--user-data-dir` |
-| Electron 앱 | Orca, Cursor, Grok Bot, 경로로 추가한 Electron 앱 | `--user-data-dir` |
-| Chromium 브라우저 | Chrome, Edge, Brave, Chromium | `--user-data-dir` |
-| 웹앱 | Gemini, Grok, ChatGPT, Claude 웹, Perplexity, 직접 입력 | 브라우저 데이터 폴더 + 앱 창 |
+| Electron 앱 | Orca, Cursor(Ubuntu AppImage 포함), Poe, Grok Bot, Grok Desktop(Ubuntu), 경로로 추가한 Electron 앱 | `--user-data-dir` |
+| 웹앱 | Chrome에 설치한 웹앱(Gemini, Grok, ChatGPT 등), Claude 웹, Perplexity, 직접 입력 | 기본 인스턴스는 설치된 웹앱 그대로, 추가 계정은 브라우저 데이터 폴더 + 앱 창 |
 | 그 밖의 프로그램 | 경로로 추가 | 실행만 관리(원하면 `--user-data-dir` 켜기) |
 
 ## 사용법

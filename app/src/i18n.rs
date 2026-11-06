@@ -32,6 +32,9 @@ pub fn t(lang: &str, key: &str) -> String {
         "empty" => if ko { "인스턴스 없음" } else { "No instances" },
         "notify.low.title" => if ko { "사용량이 거의 찼어요" } else { "Usage almost used up" },
         "notify.reset.title" => if ko { "사용량이 초기화됐어요" } else { "Usage reset" },
+        "update.install" => if ko { "v{v} 설치하고 다시 시작" } else { "Install v{v} and restart" },
+        "update.ready.title" => if ko { "AI 런처 업데이트 준비됨" } else { "AI Launcher update ready" },
+        "update.ready.body" => if ko { "v{v}을 받았어요. 트레이 메뉴나 설정 → 정보에서 설치할 수 있어요. 실행 중인 앱은 닫히지 않아요." } else { "v{v} is downloaded. Install it from the tray menu or Settings → About. Running apps stay open." },
         _ => key,
     };
     s.to_string()

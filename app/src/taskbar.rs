@@ -9,8 +9,8 @@
 //!   the launcher remembers which windows it tagged.
 //! - Writing an empty value does not return a window to its app's group. Packaged (Store) apps are
 //!   merged back by writing their own package AppUserModelID; other apps merge on their next start.
-//! - With relaunch properties present the button icon comes from RelaunchIconResource. A file
-//!   under AppData shows as a blank icon (the same file under the user folder works), so icons
+//! - With relaunch properties present the button icon comes from RelaunchIconResource, which
+//!   Explorer loads itself; the file must be visible outside any package virtualization, so icons
 //!   live in `~/.ai-launcher/icons`. Paths are also passed in 8.3 form to be safe with spaces.
 //! - The taskbar keeps the first icon it saw for an ID; colour changes show after the app restarts.
 

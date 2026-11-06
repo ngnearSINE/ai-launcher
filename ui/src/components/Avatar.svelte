@@ -1,44 +1,71 @@
 <script lang="ts">
   import { ui, installationOf } from '../lib/state.svelte'
   import type { Instance } from '../lib/types'
+  import { RING, ringBox } from '../lib/usage'
 
-  // App icon (read from the executable) or a brand tile, with the instance colour as a dot —
-  // the same dot the taskbar badge shows, so cards and pinned buttons match.
-  let { inst, size = 40, dot = true, ring = null }: { inst: Instance; size?: number; dot?: boolean; ring?: number | null } = $props()
+  // App icon (read from the executable / web app) or a brand tile. Optional concentric usage
+  // rings, outermost first — same reading as the AI Usage widget: the arc is the value shown
+  // (left by default), the white tick is the even-pace position.
+  interface Ring {
+    value: number
+    paceAt: number | null
+    level: '' | 'warn' | 'crit'
+  }
+  let { inst, size = 40, rings = [] }: { inst: Instance; size?: number; rings?: Ring[] } = $props()
 
   const install = $derived(installationOf(inst))
   const icon = $derived(install ? ui.icons[install.id] : undefined)
   const brand = $derived(install?.brand ?? { color: '#8E8E93', letter: '?', logo: 'generic' })
   const letter = $derived(inst.glyph || brand.letter || inst.alias.slice(0, 1))
-  const r = $derived(size / 2 + 3)
-  const c = $derived(2 * Math.PI * r)
+
+  // Ring geometry in a 100×100 box: 270° arcs opening at the bottom, like the widget.
+  // The box grows with the number of rings so the innermost one never touches the icon.
+  const A0 = Math.PI * 0.75
+  const SWEEP = Math.PI * 1.5
+  const stroke = RING.stroke
+  const gap = RING.gap
+  const box = $derived(ringBox(size, rings.length))
+  function arc(r: number, a0: number, a1: number) {
+    const p = (a: number) => [50 + r * Math.cos(a), 50 + r * Math.sin(a)]
+    const [x0, y0] = p(a0)
+    const [x1, y1] = p(a1)
+    return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`
+  }
+  const radius = (i: number) => 50 - RING.margin - stroke / 2 - i * (stroke + gap)
 </script>
 
-<span class="av" style:--s="{size}px" style:--c={inst.color} style:--b={brand.color}>
-  {#if icon}
-    <img src={icon} alt="" draggable="false" />
-  {:else if brand.logo === 'gemini'}
-    <span class="tile gem">
-      <svg viewBox="0 0 24 24" width={size * 0.56} height={size * 0.56}><path d="M12 2c.6 5.3 4.7 9.4 10 10-5.3.6-9.4 4.7-10 10-.6-5.3-4.7-9.4-10-10 5.3-.6 9.4-4.7 10-10z" fill="currentColor" /></svg>
-    </span>
-  {:else}
-    <span class="tile" style:font-size="{size * 0.42}px">{letter}</span>
-  {/if}
-  {#if ring !== null}
-    <svg class="ring" width={size + 8} height={size + 8} viewBox="0 0 {size + 8} {size + 8}">
-      <circle cx={size / 2 + 4} cy={size / 2 + 4} {r} class="track" />
-      <circle
-        cx={size / 2 + 4}
-        cy={size / 2 + 4}
-        {r}
-        class="val"
-        class:warn={ring >= 70}
-        class:crit={ring >= 90}
-        stroke-dasharray="{(c * Math.min(100, ring)) / 100} {c}"
-      />
+<span class="av" style:--s="{size}px" style:--box="{box}px" style:--b={brand.color}>
+  {#if rings.length}
+    <svg class="rings" viewBox="0 0 100 100" aria-hidden="true">
+      {#each rings as r, i (i)}
+        {@const rad = radius(i)}
+        {@const end = A0 + SWEEP * Math.max(0.001, Math.min(100, r.value) / 100)}
+        <path d={arc(rad, A0, A0 + SWEEP)} class="track" stroke-width={stroke} />
+        <path d={arc(rad, A0, end)} class="val {r.level}" class:inner={i > 0} stroke-width={stroke} />
+        {#if r.paceAt !== null}
+          {@const pa = A0 + (SWEEP * Math.max(0, Math.min(100, r.paceAt))) / 100}
+          <line
+            x1={50 + (rad - stroke * 0.8) * Math.cos(pa)}
+            y1={50 + (rad - stroke * 0.8) * Math.sin(pa)}
+            x2={50 + (rad + stroke * 0.8) * Math.cos(pa)}
+            y2={50 + (rad + stroke * 0.8) * Math.sin(pa)}
+            class="tick"
+          />
+        {/if}
+      {/each}
     </svg>
   {/if}
-  {#if dot}<span class="dot" class:run={inst.running}></span>{/if}
+  <span class="face">
+    {#if icon}
+      <img src={icon} alt="" draggable="false" />
+    {:else if brand.logo === 'gemini'}
+      <span class="tile gem">
+        <svg viewBox="0 0 24 24" width={size * 0.56} height={size * 0.56}><path d="M12 2c.6 5.3 4.7 9.4 10 10-5.3.6-9.4 4.7-10 10-.6-5.3-4.7-9.4-10-10 5.3-.6 9.4-4.7 10-10z" fill="currentColor" /></svg>
+      </span>
+    {:else}
+      <span class="tile" style:font-size="{size * 0.42}px">{letter}</span>
+    {/if}
+  </span>
 </span>
 
 <style>
@@ -46,9 +73,18 @@
     position: relative;
     display: inline-grid;
     place-items: center;
+    width: var(--box);
+    height: var(--box);
+    flex: none;
+  }
+  /* Icon below, rings always on top (the icon's drop-shadow filter would otherwise paint over them). */
+  .face {
+    position: relative;
+    z-index: 1;
     width: var(--s);
     height: var(--s);
-    flex: none;
+    display: grid;
+    place-items: center;
   }
   img {
     width: 100%;
@@ -71,38 +107,38 @@
   .tile.gem {
     background: linear-gradient(140deg, #5b8def, #9b72cb 55%, #d96570);
   }
-  .dot {
+  .rings {
     position: absolute;
-    right: -2px;
-    bottom: -2px;
-    width: max(9px, calc(var(--s) * 0.3));
-    height: max(9px, calc(var(--s) * 0.3));
-    border-radius: 50%;
-    background: var(--c);
-    box-shadow: 0 0 0 2px var(--surface-solid);
-  }
-  .ring {
-    position: absolute;
-    inset: -4px;
-    transform: rotate(-90deg);
+    z-index: 2;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
+    overflow: visible;
   }
-  .ring circle {
+  .rings path {
     fill: none;
-    stroke-width: 2.5;
+    stroke-linecap: round;
   }
-  .ring .track {
+  .track {
     stroke: var(--track);
   }
-  .ring .val {
-    stroke: var(--accent);
+  .val {
+    stroke: var(--ring, var(--accent));
+    transition: d 400ms var(--ease);
+  }
+  .val.inner {
+    stroke: color-mix(in srgb, var(--ring, var(--accent)) 62%, var(--surface-solid));
+  }
+  .val.warn {
+    --ring: var(--warn);
+  }
+  .val.crit {
+    --ring: var(--crit);
+  }
+  .tick {
+    stroke: var(--tick);
+    stroke-width: 1.6;
     stroke-linecap: round;
-    transition: stroke-dasharray 400ms var(--ease);
-  }
-  .ring .val.warn {
-    stroke: var(--warn);
-  }
-  .ring .val.crit {
-    stroke: var(--crit);
   }
 </style>

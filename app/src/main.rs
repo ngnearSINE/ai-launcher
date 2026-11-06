@@ -14,6 +14,7 @@ mod snapshot;
 #[cfg(windows)]
 mod taskbar;
 mod tray;
+mod updater;
 mod usage;
 mod windows;
 
@@ -47,6 +48,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(commands::handler())
         .setup(move |app| {
             let core = Arc::new(Core::new(app.handle().clone())?);
@@ -54,6 +56,7 @@ fn main() {
             core.sync_catalog();
             monitor::start(core.clone());
             usage::start(core.clone());
+            updater::start(core.clone());
             #[cfg(windows)]
             taskbar::start_watcher(core.clone());
             tray::build(app.handle(), &core)?;

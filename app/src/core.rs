@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -47,6 +47,10 @@ pub struct Core {
     pub usage_wake: tokio::sync::Notify,
     pub http: launcher_usage::reqwest::Client,
     pub config_dir: PathBuf,
+    pub update: Mutex<crate::updater::UpdateState>,
+    /// Installed web apps seen at the last scan (offered in "Add app").
+    pub web_apps: Mutex<Vec<launcher_core::env::PwaShortcut>>,
+    pub update_pending: tokio::sync::Mutex<Option<crate::updater::Pending>>,
     monitor_tx: Mutex<Sender<()>>,
     pub monitor_rx: Mutex<Option<Receiver<()>>>,
     save_gen: AtomicU64,
@@ -73,6 +77,9 @@ impl Core {
             usage_wake: tokio::sync::Notify::new(),
             http,
             config_dir,
+            update: Mutex::new(crate::updater::UpdateState::Idle),
+            web_apps: Mutex::new(Vec::new()),
+            update_pending: tokio::sync::Mutex::new(None),
             monitor_tx: Mutex::new(tx),
             monitor_rx: Mutex::new(Some(rx)),
             save_gen: AtomicU64::new(0),
@@ -83,18 +90,30 @@ impl Core {
         self.store.lock().data.settings.clone()
     }
 
-    /// Generated icons. Not under AppData: measured on Windows 11 (26300), the taskbar shows a
-    /// blank icon for a RelaunchIconResource that points into AppData, while the same file under
-    /// the user folder works.
+    /// Generated icons, outside AppData. Explorer reads them for the taskbar; if the launcher
+    /// itself runs inside a Store package's context (e.g. started from a packaged app), its AppData
+    /// writes are virtualized and Explorer would see no file — a blank taskbar icon.
     pub fn icons_dir(&self) -> PathBuf {
-        self.env.home.join(".ai-launcher").join("icons")
+        self.env.launcher_data.join("icons")
+    }
+
+    /// Installed browser web apps, freshly read from the Start menu / `.desktop` entries.
+    pub fn scan_web_apps(&self) -> Vec<launcher_core::env::PwaShortcut> {
+        let found: Vec<_> = launcher_platform::installed_web_apps()
+            .into_iter()
+            .filter_map(|(name, launcher, args, icon)| launcher_core::env::PwaShortcut::from_args(&name, launcher, &args, icon))
+            .collect();
+        *self.web_apps.lock() = found.clone();
+        found
     }
 
     /// Detects apps and adopts existing profiles, then saves and broadcasts.
     pub fn sync_catalog(&self) {
+        let mut env = self.env.clone();
+        env.pwas = self.scan_web_apps();
         {
             let mut store = self.store.lock();
-            let report = catalog::sync(&mut store.data, &self.registry, &self.env);
+            let report = catalog::sync(&mut store.data, &self.registry, &env);
             log::info!("catalog sync: {report:?}");
             if let Err(e) = store.save() {
                 log::error!("save: {e}");
@@ -291,19 +310,16 @@ impl Core {
         }
     }
 
+    /// Folder that really holds the instance's data (Store packages may keep it virtualized).
     pub fn profile_dir_of(&self, inst: &Instance) -> Option<PathBuf> {
-        if let Some(d) = inst.profile.dir() {
-            return Some(d.clone());
-        }
         let store = self.store.lock();
-        let install = store.data.installations.iter().find(|i| i.id == inst.installation_id)?;
-        self.registry.get(&install.adapter)?.default_profile_dir(install, &self.env)
+        catalog::physical_profile_dir(&store.data, &self.registry, &self.env, inst)
     }
 }
 
 /// Starts the program detached from the launcher (closing the launcher leaves it running).
 fn spawn(plan: &LaunchPlan) -> std::io::Result<u32> {
-    let mut c = Command::new(&plan.program);
+    let mut c = launcher_platform::host_command(&plan.program);
     c.args(&plan.args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     for (k, v) in &plan.env {
         c.env(k, v);

@@ -18,7 +18,8 @@ $work = Join-Path $cache 'src'
 $env:CARGO_TARGET_DIR = Join-Path $cache 'target'
 New-Item -ItemType Directory -Force $work | Out-Null
 
-robocopy $src $work /MIR /XD .git .agents node_modules dist target gen release /XF *.log /NFL /NDL /NJH /NJS /NP | Out-Null
+$localOnly = @('.git', 'node_modules', 'dist', 'target', 'gen', 'release') + @(Get-ChildItem -LiteralPath $src -Directory -Force -Filter '.*' | Where-Object Name -ne '.github' | ForEach-Object Name)
+robocopy $src $work /MIR /XD $localOnly /XF *.log /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "mirror failed ($LASTEXITCODE)" }
 
 $ui = Join-Path $work 'ui'
@@ -51,14 +52,25 @@ try {
   }
   Copy-Item (Join-Path $work 'Cargo.lock') (Join-Path $src 'Cargo.lock') -Force -ErrorAction SilentlyContinue
   if ($Bundle) {
+    # Updater artifacts are signed with the key kept outside the repository (never committed).
+    $key = Join-Path $env:USERPROFILE '.tauri\ai-launcher.key'
+    $extra = @()
+    if (Test-Path $key) {
+      $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $key -Raw
+      $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = (Get-Content "$key.password" -Raw).Trim()
+      $extra = @('--config', 'tauri.release.conf.json')
+    } else { Write-Warning 'signing key not found: building an installer without update signatures' }
     Push-Location (Join-Path $work 'app')
     try {
-      & $tauri build --bundles nsis
+      & $tauri build --bundles nsis @extra
       if ($LASTEXITCODE -ne 0) { throw 'bundle failed' }
-    } finally { Pop-Location }
+    } finally {
+      Pop-Location
+      Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY, Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
+    }
     $out = Join-Path $src 'release'
     New-Item -ItemType Directory -Force $out | Out-Null
-    Get-ChildItem (Join-Path $env:CARGO_TARGET_DIR 'release\bundle\nsis') -Filter *.exe | Copy-Item -Destination $out -Force
+    Get-ChildItem (Join-Path $env:CARGO_TARGET_DIR 'release\bundle\nsis') -File | Where-Object { $_.Extension -in '.exe', '.sig' } | Copy-Item -Destination $out -Force
     Write-Host "installer -> $out"
   } else {
     & cargo build --release -p ai-launcher --features custom-protocol

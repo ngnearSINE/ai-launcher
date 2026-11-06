@@ -139,6 +139,28 @@ pub trait AppAdapter: Send + Sync {
         Vec::new()
     }
 
+    /// Every physical place a profile folder's data can be in. Normally just `dir`; a Store
+    /// package with write virtualization may keep it in its private LocalCache instead.
+    fn profile_locations(&self, _install: &Installation, dir: &Path, _env: &Env) -> Vec<PathBuf> {
+        vec![dir.to_path_buf()]
+    }
+
+    /// The location that actually holds the profile (the first with the app's marker file,
+    /// else the first that exists, else `dir`). Used for reading usage, sizes and opening folders.
+    fn resolve_profile_dir(&self, install: &Installation, dir: &Path, env: &Env) -> PathBuf {
+        let locs = self.profile_locations(install, dir, env);
+        locs.iter()
+            .find(|p| p.join(self.profile_marker()).is_file())
+            .or_else(|| locs.iter().find(|p| p.is_dir()))
+            .cloned()
+            .unwrap_or_else(|| dir.to_path_buf())
+    }
+
+    /// File whose presence means "this folder has been used by the app".
+    fn profile_marker(&self) -> &'static str {
+        "Local State"
+    }
+
     /// Profile folders that already exist on disk (made by hand or by an earlier tool), as
     /// `(suggested alias, folder)`.
     fn existing_profiles(&self, _install: &Installation, _env: &Env) -> Vec<(String, PathBuf)> {

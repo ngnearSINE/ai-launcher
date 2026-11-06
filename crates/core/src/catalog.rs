@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::adapter::{Ctx, Registry};
 use crate::adapters::chromium::BROWSERS;
-use crate::adapters::webapp::{preset_install, PRESETS};
+use crate::adapters::webapp::{is_auto_ai, pwa_install, PRESETS};
 use crate::env::{normalize_path, Env};
 use crate::model::*;
 use crate::settings::Settings;
@@ -27,6 +27,20 @@ pub struct SyncReport {
 pub fn sync(data: &mut StoreFile, reg: &Registry, env: &Env) -> SyncReport {
     let mut report = SyncReport::default();
 
+    // Profiles assigned under the old data folder (the installer's program folder) that were
+    // never created move to the current data folder.
+    let old_roots = [env.local.join("AI Launcher").join("profiles"), env.local.join("AI Launcher Data").join("profiles")];
+    for inst in data.instances.iter_mut() {
+        if let Profile::Dir { path, managed: true } = &mut inst.profile {
+            if path.exists() {
+                continue;
+            }
+            if let Some(rest) = old_roots.iter().find_map(|r| crate::env::strip_prefix_ci(path, r)) {
+                *path = env.launcher_data.join("profiles").join(rest);
+            }
+        }
+    }
+
     // 1. Installed apps.
     let detected: Vec<Installation> = reg.all().iter().flat_map(|a| a.detect(env)).collect();
     for found in &detected {
@@ -42,9 +56,21 @@ pub fn sync(data: &mut StoreFile, reg: &Registry, env: &Env) -> SyncReport {
                 }
             }
             None => {
-                data.installations.push(found.clone());
+                let mut f = found.clone();
+                // Browsers are engines for web apps, not apps to show.
+                if f.adapter == "chromium" {
+                    f.hidden = true;
+                }
+                data.installations.push(f);
                 report.added_installations.push(found.id.clone());
             }
+        }
+    }
+    // Catalogs from before browsers were hidden: hide once, then respect the user's choice.
+    for inst in data.installations.iter_mut().filter(|i| i.adapter == "chromium" && i.source == InstallSource::Detected) {
+        if !inst.options.contains_key("autoHidden") {
+            inst.hidden = true;
+            inst.options.insert("autoHidden".into(), true.into());
         }
     }
     for inst in data.installations.iter_mut() {
@@ -60,19 +86,47 @@ pub fn sync(data: &mut StoreFile, reg: &Registry, env: &Env) -> SyncReport {
         }
     }
 
-    // 2. Web apps follow the preferred browser that is present.
-    let browser = preferred_browser(data).cloned();
-    if let Some(browser) = &browser {
-        for p in PRESETS.iter().filter(|p| p.auto) {
-            let id = format!("webapp:{}", p.id);
-            if !data.dismissed.contains(&id) && !data.installations.iter().any(|i| i.id == id) {
-                data.installations.push(preset_install(p, browser));
+    // 2. Installed web apps (PWAs). AI services register themselves; others are offered in
+    //    "Add app". Web apps an earlier version created from presets are dropped while unused.
+    let unused_preset = |id: &str, d: &StoreFile| {
+        id.starts_with("webapp:")
+            && PRESETS.iter().any(|p| id == format!("webapp:{}", p.id))
+            && d.instances.iter().filter(|x| x.installation_id == id).all(|x| x.launch_count == 0)
+    };
+    let stale: Vec<String> = data
+        .installations
+        .iter()
+        .filter(|i| i.source == InstallSource::Detected && unused_preset(&i.id, data))
+        .map(|i| i.id.clone())
+        .collect();
+    data.instances.retain(|x| !stale.contains(&x.installation_id));
+    data.installations.retain(|i| !stale.contains(&i.id));
+
+    let browsers: Vec<Installation> = data.installations.iter().filter(|i| i.adapter == "chromium").cloned().collect();
+    for p in &env.pwas {
+        let id = format!("pwa:{}", p.app_id);
+        match data.installations.iter_mut().find(|i| i.id == id) {
+            Some(existing) => {
+                let fresh = pwa_install(p, &browsers, env);
+                existing.options.extend(fresh.options);
+                existing.exe = fresh.exe;
+                existing.present = true;
+            }
+            None if is_auto_ai(&p.name) && !data.dismissed.contains(&id) => {
+                data.installations.push(pwa_install(p, &browsers, env));
                 report.added_installations.push(id);
             }
+            None => {}
         }
     }
+    let browser = preferred_browser(data).cloned();
     let present: Vec<String> = data.installations.iter().filter(|i| i.present).map(|i| i.id.clone()).collect();
     for inst in data.installations.iter_mut().filter(|i| i.adapter == "webapp") {
+        if let Some(app_id) = inst.options.get("pwaAppId").and_then(|v| v.as_str()) {
+            // An installed web app is present while its shortcut is; extra accounts also need a browser.
+            inst.present = env.pwas.is_empty() || env.pwas.iter().any(|p| p.app_id == app_id);
+            continue;
+        }
         let bound = inst.options.get("browserInstall").and_then(|v| v.as_str()).map(str::to_string);
         let ok = bound.as_ref().map(|b| present.contains(b)).unwrap_or(false);
         match (&browser, ok) {
@@ -86,10 +140,18 @@ pub fn sync(data: &mut StoreFile, reg: &Registry, env: &Env) -> SyncReport {
         }
     }
 
-    // 3. A first instance for each new installation.
+    // 3. A first instance for each new installation. Browsers are engines for web apps and get
+    //    no card of their own; a browser instance is made on purpose from "New instance".
+    //    Earlier versions did create one: such a card is dropped while it was never launched.
+    data.instances.retain(|x| {
+        let auto_browser = x.profile.is_default()
+            && x.launch_count == 0
+            && data.installations.iter().any(|i| i.id == x.installation_id && i.adapter == "chromium" && i.source == InstallSource::Detected);
+        !auto_browser
+    });
     for id in report.added_installations.clone() {
         let Some(install) = data.installations.iter().find(|i| i.id == id).cloned() else { continue };
-        if data.instances.iter().any(|x| x.installation_id == id) {
+        if install.adapter == "chromium" || data.instances.iter().any(|x| x.installation_id == id) {
             continue;
         }
         let alias = install.name.clone();
@@ -227,11 +289,36 @@ pub fn instance_data_paths(data: &StoreFile, reg: &Registry, env: &Env, inst: &I
     let mut out = vec![dir.clone()];
     if let Some(install) = data.installations.iter().find(|i| i.id == inst.installation_id) {
         if let Some(adapter) = reg.get(&install.adapter) {
+            out = adapter.profile_locations(install, dir, env);
             out.extend(adapter.companion_dirs(install, dir, env));
         }
     }
     out.retain(|p| p.exists());
+    out.dedup();
     out
+}
+
+/// The folder that really holds an instance's data (see `AppAdapter::resolve_profile_dir`),
+/// falling back to the app's default folder for default-profile instances.
+pub fn physical_profile_dir(data: &StoreFile, reg: &Registry, env: &Env, inst: &Instance) -> Option<PathBuf> {
+    let install = data.installations.iter().find(|i| i.id == inst.installation_id)?;
+    let adapter = reg.get(&install.adapter)?;
+    let logical = match inst.profile.dir() {
+        Some(d) => d.clone(),
+        None => adapter.default_profile_dir(install, env)?,
+    };
+    Some(adapter.resolve_profile_dir(install, &logical, env))
+}
+
+/// Remember a profile folder so the next scan does not offer it again (instance removed but
+/// its data kept).
+pub fn forget_profile(data: &mut StoreFile, env: &Env, inst: &Instance) {
+    if let Some(dir) = inst.profile.dir() {
+        let key = normalize_path(dir, env.os);
+        if !data.imported_profiles.contains(&key) {
+            data.imported_profiles.push(key);
+        }
+    }
 }
 
 /// Profiles can be placed under a user-chosen root (advanced setting) for apps whose adapter
@@ -281,6 +368,7 @@ mod tests {
             program_files: vec![root.join("PF")],
             path: vec![],
             launcher_data: root.join("Local").join("AI Launcher"),
+            pwas: vec![],
         }
     }
 
@@ -296,21 +384,54 @@ mod tests {
         std::fs::write(extra.join("config.json"), b"{}").unwrap();
         std::fs::create_dir_all(e.config.join("Claude-3p")).unwrap();
         std::fs::write(e.config.join("Claude-3p").join("config.json"), b"{}").unwrap();
+        // Squirrel-style Electron app (stub + app-<version>\resources\app.asar).
+        let poe = e.local.join("Poe");
+        std::fs::create_dir_all(poe.join("app-1.1.40").join("resources")).unwrap();
+        std::fs::write(poe.join("Poe.exe"), b"").unwrap();
+        std::fs::write(poe.join("app-1.1.40").join("resources").join("app.asar"), b"").unwrap();
+        assert!(crate::adapters::electron::looks_like_electron(&poe.join("Poe.exe")));
         let chrome = e.program_files[0].join("Google/Chrome/Application");
         std::fs::create_dir_all(&chrome).unwrap();
         std::fs::write(chrome.join("chrome.exe"), b"").unwrap();
+
+        let mut e = e;
+        let pwa = |name: &str, id: &str| crate::env::PwaShortcut {
+            name: name.into(),
+            launcher: chrome.join("chrome_proxy.exe"),
+            profile_directory: "Profile 1".into(),
+            app_id: id.into(),
+            icon: None,
+        };
+        e.pwas = vec![pwa("Gemini", "kidh"), pwa("Google Keep", "hmjk")];
 
         let reg = Registry::standard();
         let mut data = StoreFile::default();
         let r = sync(&mut data, &reg, &e);
         assert!(r.added_installations.contains(&"claude:classic".to_string()));
-        assert!(r.added_installations.contains(&"webapp:gemini".to_string()));
+        assert!(r.added_installations.contains(&"electron:poe".to_string()));
+        assert!(r.added_installations.contains(&"pwa:kidh".to_string()), "AI web apps register themselves");
+        assert!(!r.added_installations.contains(&"pwa:hmjk".to_string()), "other web apps are only offered");
+        assert!(data.installations.iter().find(|i| i.id == "chromium:chrome").unwrap().hidden, "browsers are hidden");
         let claude: Vec<_> = data.instances.iter().filter(|i| i.installation_id == "claude:classic").collect();
         assert_eq!(claude.len(), 2, "default + Claude-Work, not Claude-3p");
         assert!(claude.iter().any(|i| i.profile.is_default()));
         assert!(claude.iter().any(|i| i.alias == "Work"));
-        let gemini = data.instances.iter().find(|i| i.installation_id == "webapp:gemini").unwrap();
-        assert!(!gemini.profile.is_default(), "web apps always get their own browser folder");
+        assert!(!data.instances.iter().any(|i| i.installation_id == "chromium:chrome"), "browsers get no automatic card");
+        assert!(data.installations.iter().any(|i| i.id == "chromium:chrome"), "but stay available as an installation");
+        let gemini = data.instances.iter().find(|i| i.installation_id == "pwa:kidh").unwrap();
+        assert!(gemini.profile.is_default(), "the installed web app is the default instance");
+        let gi = data.installations.iter().find(|i| i.id == "pwa:kidh").unwrap().clone();
+        let c = ctx(&data, &e);
+        let plan = reg.get("webapp").unwrap().launch_plan(&gi, gemini, &c).unwrap();
+        assert_eq!(plan.args, ["--profile-directory=Profile 1", "--app-id=kidh"]);
+        assert!(plan.program.ends_with("chrome_proxy.exe"));
+        // An extra account opens the service URL in its own browser folder.
+        let mut d2 = data.clone();
+        let extra = create_instance(&mut d2, &reg, &e, "pwa:kidh", "Work", None, false).unwrap();
+        let c2 = ctx(&d2, &e);
+        let p2 = reg.get("webapp").unwrap().launch_plan(&gi, &extra, &c2).unwrap();
+        assert!(p2.args.iter().any(|a| a == "--app=https://gemini.google.com/app"));
+        assert!(p2.args[0].starts_with("--user-data-dir="));
 
         // Second sync is stable.
         let r2 = sync(&mut data, &reg, &e);
@@ -318,7 +439,7 @@ mod tests {
 
         // New instance gets Claude-<slug> next to the default folder.
         let n = create_instance(&mut data, &reg, &e, "claude:classic", "Team A", None, true).unwrap();
-        assert_eq!(n.profile.dir().unwrap(), &e.config.join("Claude-Team-A"));
+        assert_eq!(n.profile.dir().unwrap(), &e.launcher_data.join("profiles").join("Claude-Team-A"));
         let ctx = ctx(&data, &e);
         let plan = reg.get("claude").unwrap().launch_plan(&data.installations[0], &n, &ctx).unwrap();
         assert!(plan.args[0].starts_with("--user-data-dir="));

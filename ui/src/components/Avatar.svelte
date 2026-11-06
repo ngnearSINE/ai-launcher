@@ -77,7 +77,10 @@
     height: var(--box);
     flex: none;
   }
+  /* Icon below, rings always on top (the icon's drop-shadow filter would otherwise paint over them). */
   .face {
+    position: relative;
+    z-index: 1;
     width: var(--s);
     height: var(--s);
     display: grid;
@@ -106,6 +109,7 @@
   }
   .rings {
     position: absolute;
+    z-index: 2;
     inset: 0;
     width: 100%;
     height: 100%;

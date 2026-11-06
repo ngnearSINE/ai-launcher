@@ -18,7 +18,8 @@ $work = Join-Path $cache 'src'
 $env:CARGO_TARGET_DIR = Join-Path $cache 'target'
 New-Item -ItemType Directory -Force $work | Out-Null
 
-robocopy $src $work /MIR /XD .git .agents node_modules dist target gen release /XF *.log /NFL /NDL /NJH /NJS /NP | Out-Null
+$localOnly = @('.git', 'node_modules', 'dist', 'target', 'gen', 'release') + @(Get-ChildItem -LiteralPath $src -Directory -Force -Filter '.*' | Where-Object Name -ne '.github' | ForEach-Object Name)
+robocopy $src $work /MIR /XD $localOnly /XF *.log /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "mirror failed ($LASTEXITCODE)" }
 
 $ui = Join-Path $work 'ui'

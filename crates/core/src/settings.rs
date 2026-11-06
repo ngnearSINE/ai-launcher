@@ -30,7 +30,10 @@ pub struct Settings {
     pub theme: String,
     pub accent: String,
     pub glass: bool,
+    /// How much the window background lets the backdrop through (0 = opaque, 100 = clearest).
     pub glass_strength: u8,
+    /// Windows backdrop material: `tabbed` (Mica Alt), `mica`, `acrylic` or `none`.
+    pub background_effect: String,
     pub reduce_motion: bool,
     pub density: String,
     pub card_usage_style: String,
@@ -58,9 +61,15 @@ pub struct Settings {
     pub float_always_on_top: bool,
     pub float_opacity: u8,
     pub float_snap_edges: bool,
-    pub float_show_usage: bool,
+    /// Usage ring around each icon: `both` (outer weekly, inner 5-hour), `5h`, `weekly`,
+    /// `tight` (whichever has less left) or `none`.
+    pub float_ring: String,
     pub float_size: u16,
     pub float_position: Option<(i32, i32)>,
+    /// Main window ⇄ floating launcher: `swap` hides one when showing the other, `both` keeps both.
+    pub float_switch: String,
+    pub float_hotkey: String,
+    pub float_hotkey_enabled: bool,
 
     // Taskbar (advanced)
     pub taskbar_separate: bool,
@@ -73,6 +82,10 @@ pub struct Settings {
     pub usage_enabled: bool,
     pub usage_refresh_minutes: u16,
     pub usage_show_reset: bool,
+    /// Numbers and bars show what is `left` (default) or what is `used`.
+    pub usage_value: String,
+    /// White tick where usage should be if it were spread evenly over the window.
+    pub usage_show_pace: bool,
     pub usage_warn_percent: u8,
     pub usage_crit_percent: u8,
     pub notify_reset: bool,
@@ -100,6 +113,7 @@ impl Default for Settings {
             accent: "#0A84FF".into(),
             glass: true,
             glass_strength: 45,
+            background_effect: "tabbed".into(),
             reduce_motion: false,
             density: "comfortable".into(),
             card_usage_style: "bars".into(),
@@ -124,9 +138,12 @@ impl Default for Settings {
             float_always_on_top: true,
             float_opacity: 92,
             float_snap_edges: true,
-            float_show_usage: true,
+            float_ring: "both".into(),
             float_size: 44,
             float_position: None,
+            float_switch: "swap".into(),
+            float_hotkey: "Alt+Shift+F".into(),
+            float_hotkey_enabled: true,
 
             taskbar_separate: true,
             taskbar_badge: true,
@@ -137,6 +154,8 @@ impl Default for Settings {
             usage_enabled: true,
             usage_refresh_minutes: 5,
             usage_show_reset: true,
+            usage_value: "left".into(),
+            usage_show_pace: true,
             usage_warn_percent: 70,
             usage_crit_percent: 90,
             notify_reset: false,

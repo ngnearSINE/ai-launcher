@@ -19,15 +19,14 @@
   const list = $derived(visibleInstances())
   const snap = $derived(ui.snap!)
   const runningCount = $derived(snap.instances.filter((i) => i.running).length)
+  // A few state filters as chips; apps go in one dropdown instead of a chip each.
   const filters = $derived([
     { id: 'all', label: t('전체'), count: snap.instances.length },
     { id: 'running', label: t('실행 중'), count: runningCount },
     ...(snap.instances.some((i) => i.favorite) ? [{ id: 'favorite', label: t('즐겨찾기'), count: snap.instances.filter((i) => i.favorite).length }] : []),
-    ...snap.installations
-      .filter((a) => !a.hidden && snap.instances.some((i) => i.installationId === a.id))
-      .map((a) => ({ id: `app:${a.id}`, label: a.name, count: snap.instances.filter((i) => i.installationId === a.id).length })),
     ...snap.groups.map((g) => ({ id: `group:${g.id}`, label: g.name, count: snap.instances.filter((i) => i.groupId === g.id).length })),
   ])
+  const apps = $derived(snap.installations.filter((a) => !a.hidden && snap.instances.some((i) => i.installationId === a.id)))
 
   onMount(() => {
     const un = listenUiActions()
@@ -96,6 +95,12 @@
     </label>
     <div class="right" data-tauri-drag-region>
       <button class="btn primary sm" onclick={() => newInstance()} title="Ctrl+N"><Icon name="plus" size={14} /> {t('새 인스턴스')}</button>
+      <button
+        class="icon-btn"
+        title={t('플로팅 런처로 전환') + (snap.settings.floatHotkeyEnabled ? ` (${snap.settings.floatHotkey})` : '')}
+        aria-label={t('플로팅 런처로 전환')}
+        onclick={() => run(api.switchView('float'))}><Icon name="float" size={17} /></button
+      >
       <button class="icon-btn" class:active={ui.view === 'settings'} title={t('설정') + ' (Ctrl+,)'} onclick={() => (ui.view = ui.view === 'settings' ? 'home' : 'settings')}><Icon name="settings" size={17} /></button>
       <div class="winctl">
         <button aria-label={t('최소화')} onclick={() => win.minimize()}><Icon name="minus" size={14} /></button>
@@ -117,6 +122,17 @@
         {/each}
       </div>
       <div class="views">
+        {#if apps.length > 1}
+          <select
+            class="select app-filter"
+            value={ui.filter.startsWith('app:') ? ui.filter : ''}
+            onchange={(e) => (ui.filter = (e.target as HTMLSelectElement).value || 'all')}
+            aria-label={t('앱')}
+          >
+            <option value="">{t('모든 앱')}</option>
+            {#each apps as a (a.id)}<option value="app:{a.id}">{a.name}</option>{/each}
+          </select>
+        {/if}
         <button class="icon-btn sm" class:active={ui.layout === 'grid'} aria-label={t('카드')} onclick={() => setLayout('grid')}><Icon name="grid" size={15} /></button>
         <button class="icon-btn sm" class:active={ui.layout === 'list'} aria-label={t('목록')} onclick={() => setLayout('list')}><Icon name="list" size={15} /></button>
       </div>
@@ -155,12 +171,6 @@
               ondrop={() => onDrop(inst.id)}
             />
           {/each}
-          {#if ui.layout === 'grid'}
-            <button class="add-card" onclick={() => newInstance()}>
-              <Icon name="plus" size={22} />
-              <span>{t('새 인스턴스')}</span>
-            </button>
-          {/if}
         </div>
       {/if}
     </main>
@@ -306,33 +316,26 @@
     overflow: auto;
     padding: 4px 20px 24px;
   }
+  /* Fixed row unit: short cards take one row, usage cards two or three, and `dense` lets
+     short cards fill the space beside tall ones, so the grid has no holes. */
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-    gap: 14px;
-    align-items: start;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-auto-rows: 104px;
+    grid-auto-flow: row dense;
+    gap: 12px;
   }
   .cards.list {
     grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+    grid-auto-flow: row;
     gap: 8px;
   }
-  .add-card {
-    min-height: 112px;
-    border-radius: var(--r-card);
-    border: 1.5px dashed var(--line-strong);
-    background: transparent;
-    color: var(--text-3);
-    display: grid;
-    place-content: center;
-    justify-items: center;
-    gap: 6px;
-    font-size: var(--fs-13);
-    transition: all var(--dur) var(--ease);
-  }
-  .add-card:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-    background: var(--accent-softer);
+  .app-filter {
+    width: auto;
+    height: 28px;
+    font-size: var(--fs-12);
+    margin-right: 6px;
   }
   .empty {
     height: 100%;

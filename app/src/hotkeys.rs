@@ -18,6 +18,8 @@ pub fn plugin() -> TauriPlugin<Wry> {
             let s = core.settings();
             if s.quick_hotkey_enabled && parse(&s.quick_hotkey).as_ref() == Some(shortcut) {
                 crate::windows::toggle_quick(app, None);
+            } else if s.float_hotkey_enabled && parse(&s.float_hotkey).as_ref() == Some(shortcut) {
+                crate::windows::toggle_view(app, core.inner());
             } else if s.best_claude_hotkey_enabled && parse(&s.best_claude_hotkey).as_ref() == Some(shortcut) {
                 if let Err(e) = core.launch_best_claude() {
                     log::warn!("best claude: {e}");
@@ -37,7 +39,11 @@ pub fn apply(app: &AppHandle, core: &Arc<Core>) {
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let s = core.settings();
-    for (on, key) in [(s.quick_hotkey_enabled, &s.quick_hotkey), (s.best_claude_hotkey_enabled, &s.best_claude_hotkey)] {
+    for (on, key) in [
+        (s.quick_hotkey_enabled, &s.quick_hotkey),
+        (s.best_claude_hotkey_enabled, &s.best_claude_hotkey),
+        (s.float_hotkey_enabled, &s.float_hotkey),
+    ] {
         if !on {
             continue;
         }

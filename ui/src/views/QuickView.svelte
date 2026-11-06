@@ -4,7 +4,8 @@
   import { api } from '../lib/api'
   import { instanceMenu, launch, openSettings } from '../lib/actions'
   import { t } from '../lib/i18n.svelte'
-  import { appName, headroom, run, ui, visibleInstances } from '../lib/state.svelte'
+  import { appName, run, settings, ui, visibleInstances } from '../lib/state.svelte'
+  import { levelOf, mainOrg, tightest } from '../lib/usage'
   import Avatar from '../components/Avatar.svelte'
   import Icon from '../components/Icon.svelte'
 
@@ -65,7 +66,7 @@
   </div>
   <div class="list" role="listbox">
     {#each list as inst, i (inst.id)}
-      {@const h = headroom(inst)}
+      {@const w = tightest(mainOrg(inst), settings())}
       <button
         class="item"
         class:on={i === active}
@@ -81,8 +82,9 @@
           <span class="a truncate">{inst.alias}</span>
           <span class="b truncate">{[appName(inst) !== inst.alias ? appName(inst) : '', inst.usage?.report?.email ?? ''].filter(Boolean).join(' · ') || (inst.profile.kind === 'default' ? t('기본 프로필') : '')}</span>
         </span>
-        {#if h !== null}
-          <span class="mini" title="{Math.round(h)}%"><span class="f" class:warn={h >= 70} class:crit={h >= 90} style:width="{h}%"></span></span>
+        {#if w}
+          {@const lv = levelOf(w, settings())}
+          <span class="mini" title="{Math.round(w.shown)}%"><span class="f" class:warn={lv === 'warn'} class:crit={lv === 'crit'} style:width="{w.shown}%"></span></span>
         {/if}
         {#if inst.running}<span class="run" title={t('실행 중')}></span>{/if}
         {#if i < 9}<span class="kbd">{i + 1}</span>{/if}

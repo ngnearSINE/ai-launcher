@@ -55,7 +55,15 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         check_update,
         install_update,
         add_installed_web_app,
+        switch_view,
     ]
+}
+
+/// `to`: `float` or `main`. Async: it may create the floating window.
+#[tauri::command]
+async fn switch_view(app: AppHandle, core: State<'_, Arc<Core>>, to: String) -> Res<()> {
+    crate::windows::switch_view(&app, core.inner(), to == "float");
+    Ok(())
 }
 
 /// Adds an installed browser web app (from the Start menu) with its default instance.
@@ -396,7 +404,7 @@ async fn update_settings(app: AppHandle, core: State<'_, Arc<Core>>, patch: Valu
     if keys.iter().any(|k| k.starts_with("float")) {
         crate::windows::sync_float(&app, &core);
     }
-    if keys.iter().any(|k| *k == "glass" || *k == "theme") {
+    if keys.iter().any(|k| *k == "glass" || *k == "theme" || *k == "backgroundEffect") {
         crate::windows::apply_appearance(&app, &core);
     }
     if keys.contains(&"startWithOs") {

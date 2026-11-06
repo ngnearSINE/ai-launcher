@@ -3,6 +3,7 @@
   import { until, ago, pct, money } from '../lib/format'
   import { settings, ui, visibleOrgs } from '../lib/state.svelte'
   import type { Instance, Quota, UsageError } from '../lib/types'
+  import { win, levelOf } from '../lib/usage'
   import Icon from './Icon.svelte'
 
   // Usage of one instance, read from that instance's own profile. Several organisations
@@ -20,9 +21,6 @@
     if (q.kind === 'weekly') return t('주간')
     if (q.kind === 'credits') return t('크레딧')
     return q.label
-  }
-  function level(p: number) {
-    return p >= s.usageCritPercent ? 'crit' : p >= s.usageWarnPercent ? 'warn' : ''
   }
   function errorLine(e: UsageError | null): string {
     if (!e) return ''
@@ -66,10 +64,17 @@
   {/if}
   <div class="rows">
     {#each quotas as q (q.kind + q.label)}
-      <div class="row {level(q.usedPercent)}" title={q.resetsAt ? t('{time} 후 초기화', { time: until(q.resetsAt, ui.now) }) : ''}>
+      {@const w = win(q, s, ui.now)}
+      <div
+        class="row {levelOf(w, s)}"
+        title={[q.resetsAt ? t('{time} 후 초기화', { time: until(q.resetsAt, ui.now) }) : '', w.paceAt !== null ? t('흰 눈금: 고르게 썼을 때의 위치') : '', w.paceWarn ? t('지금 속도면 초기화 전에 바닥나요') : ''].filter(Boolean).join(' · ')}
+      >
         <span class="lab">{label(q)}</span>
-        <span class="bar"><span class="fill" style:width="{Math.min(100, q.usedPercent)}%"></span></span>
-        <span class="val num">{pct(q.usedPercent)}</span>
+        <span class="bar">
+          <span class="fill" style:width="{Math.min(100, w.shown)}%"></span>
+          {#if w.paceAt !== null && q.kind !== 'credits'}<span class="pace" style:left="{w.paceAt}%"></span>{/if}
+        </span>
+        <span class="val num">{pct(w.shown)}</span>
         {#if !compact && s.usageShowReset}
           <span class="reset num faint">{q.resetsAt ? until(q.resetsAt, ui.now) : q.kind === 'credits' && q.limitAmount ? `${money(q.usedAmount ?? 0, q.currency)} / ${money(q.limitAmount, q.currency)}` : ''}</span>
         {/if}
@@ -113,10 +118,19 @@
     text-overflow: ellipsis;
   }
   .bar {
+    position: relative;
     height: 6px;
     border-radius: 6px;
     background: var(--track);
-    overflow: hidden;
+  }
+  .pace {
+    position: absolute;
+    top: -2px;
+    width: 2px;
+    height: 10px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--tick);
   }
   .fill {
     display: block;

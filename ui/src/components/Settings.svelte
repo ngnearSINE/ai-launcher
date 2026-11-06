@@ -126,10 +126,22 @@
       <Row label={t('강조색')} stack>
         <ColorPick value={s.accent} onchange={(c) => set('accent', c)} />
       </Row>
-      <Row label={t('유리 효과')} desc={t('창 배경에 Windows Mica·아크릴 효과를 씁니다')}>
-        <Switch checked={s.glass} onchange={(v) => set('glass', v)} />
+      <Row label={t('창 배경 효과')} desc={t('Windows가 창 뒤를 비춰 보이게 하는 소재예요. Mica Alt는 배경화면 색이 은은하게, 아크릴은 뒤의 창까지 흐리게 비쳐요.')}>
+        <select
+          class="select w"
+          value={s.glass ? s.backgroundEffect : 'none'}
+          onchange={(e) => {
+            const v = (e.target as HTMLSelectElement).value as S['backgroundEffect']
+            run(api.updateSettings({ glass: v !== 'none', backgroundEffect: v }))
+          }}
+        >
+          <option value="tabbed">Mica Alt</option>
+          <option value="mica">Mica</option>
+          <option value="acrylic">{t('아크릴')}</option>
+          <option value="none">{t('없음 (불투명)')}</option>
+        </select>
       </Row>
-      <Row label={t('유리 효과 강도')} desc={`${s.glassStrength}`}>
+      <Row label={t('투명도')} desc={`${s.glassStrength}% · ${t('높을수록 배경 효과가 더 비쳐요')}`}>
         <input type="range" min="0" max="100" value={s.glassStrength} disabled={!s.glass} onchange={(e) => set('glassStrength', +(e.target as HTMLInputElement).value)} />
       </Row>
       <Row label={t('카드 밀도')}>
@@ -159,8 +171,32 @@
         <Segmented value={s.trayDoubleClick} onchange={(v) => set('trayDoubleClick', v)} options={[{ value: 'main', label: t('관리 창') }, { value: 'quick', label: t('빠른 실행') }, { value: 'none', label: t('사용 안 함') }]} />
       </Row>
       <h2>{t('플로팅 런처')}</h2>
+      <div class="tip">
+        <Icon name="float" size={14} />
+        <span>{t('런처 창 제목줄의 플로팅 단추나 단축키로 언제든 전환해요. 플로팅에서는 위쪽 ↗ 단추나 빈 곳 더블클릭으로 런처 창에 돌아와요.')}</span>
+      </div>
       <Row label={t('플로팅 런처 표시')} desc={t('화면 가장자리에 떠 있는 작은 아이콘 줄')}>
         <Switch checked={s.floatEnabled} onchange={(v) => set('floatEnabled', v)} />
+      </Row>
+      <Row label={t('런처 창 ⇄ 플로팅 전환 단축키')}>
+        <HotkeyInput value={s.floatHotkey} onchange={(v) => set('floatHotkey', v)} />
+        <Switch checked={s.floatHotkeyEnabled} onchange={(v) => set('floatHotkeyEnabled', v)} />
+      </Row>
+      <Row label={t('전환할 때')} desc={t('「한쪽만 보이기」는 한쪽을 열면 다른 쪽을 숨겨요')}>
+        <Segmented value={s.floatSwitch} onchange={(v) => set('floatSwitch', v)} options={[{ value: 'swap', label: t('한쪽만 보이기') }, { value: 'both', label: t('둘 다 두기') }]} />
+      </Row>
+      <Row label={t('사용량 고리')} desc={t('「둘 다」는 바깥 고리가 주간, 안쪽 고리가 5시간이에요. 흰 눈금은 고르게 썼을 때의 위치예요.')} stack>
+        <Segmented
+          value={s.floatRing}
+          onchange={(v) => set('floatRing', v)}
+          options={[
+            { value: 'both', label: t('둘 다') },
+            { value: 'tight', label: t('더 빠듯한 쪽') },
+            { value: '5h', label: t('5시간') },
+            { value: 'weekly', label: t('주간') },
+            { value: 'none', label: t('끄기') },
+          ]}
+        />
       </Row>
       <Row label={t('방향')}>
         <Segmented value={s.floatOrientation} onchange={(v) => set('floatOrientation', v)} options={[{ value: 'vertical', label: t('세로') }, { value: 'horizontal', label: t('가로') }]} />
@@ -173,9 +209,6 @@
       </Row>
       <Row label={t('항상 위에')}>
         <Switch checked={s.floatAlwaysOnTop} onchange={(v) => set('floatAlwaysOnTop', v)} />
-      </Row>
-      <Row label={t('사용량 고리 표시')} desc={t('아이콘 둘레에 5시간·주간 중 높은 쪽')}>
-        <Switch checked={s.floatShowUsage} onchange={(v) => set('floatShowUsage', v)} />
       </Row>
       <Row label={t('위치 초기화')}>
         <button class="btn sm" onclick={() => set('floatPosition', null)}>{t('초기화')}</button>
@@ -211,6 +244,12 @@
       </Row>
       <Row label={t('새로고침 주기')} desc={t('{n}분 (서비스 요청 제한 때문에 2분보다 짧게는 묻지 않아요)', { n: s.usageRefreshMinutes })}>
         <input type="range" min="2" max="60" value={s.usageRefreshMinutes} onchange={(e) => set('usageRefreshMinutes', +(e.target as HTMLInputElement).value)} />
+      </Row>
+      <Row label={t('숫자와 막대')} desc={t('남은 양을 보여 줄지 쓴 양을 보여 줄지 골라요')}>
+        <Segmented value={s.usageValue} onchange={(v) => set('usageValue', v)} options={[{ value: 'left', label: t('남은 양') }, { value: 'used', label: t('쓴 양') }]} />
+      </Row>
+      <Row label={t('페이스 눈금')} desc={t('기간 동안 고르게 썼다면 지금 있어야 할 위치를 흰 눈금으로 표시해요')}>
+        <Switch checked={s.usageShowPace} onchange={(v) => set('usageShowPace', v)} />
       </Row>
       <Row label={t('초기화까지 남은 시간 표시')}>
         <Switch checked={s.usageShowReset} onchange={(v) => set('usageShowReset', v)} />

@@ -29,8 +29,20 @@ pub fn hide(app: &AppHandle, label: &str) {
     }
 }
 
-fn effects(glass: bool, effect: Effect) -> Option<tauri::utils::config::WindowEffectsConfig> {
-    glass.then(|| EffectsBuilder::new().effect(effect).build())
+/// Backdrop material from settings (`tabbed` = Mica Alt, `mica`, `acrylic`, `none`).
+/// `fallback` is used for panels where Mica does not suit (the quick panel floats over anything).
+fn effects(core: &Core, fallback: Option<Effect>) -> Option<tauri::utils::config::WindowEffectsConfig> {
+    let s = core.settings();
+    if !s.glass {
+        return None;
+    }
+    let effect = match s.background_effect.as_str() {
+        "none" => return None,
+        "mica" => Effect::Mica,
+        "acrylic" => Effect::Acrylic,
+        _ => Effect::Tabbed,
+    };
+    Some(EffectsBuilder::new().effect(fallback.unwrap_or(effect)).build())
 }
 
 fn quick_window(app: &AppHandle) -> Option<WebviewWindow> {
@@ -38,7 +50,6 @@ fn quick_window(app: &AppHandle) -> Option<WebviewWindow> {
         return Some(w);
     }
     let core = app.try_state::<Arc<Core>>()?;
-    let glass = core.settings().glass;
     let mut b = WebviewWindowBuilder::new(app, "quick", WebviewUrl::App("index.html".into()))
         .title("AI Launcher")
         .inner_size(QUICK_W, QUICK_H)
@@ -50,7 +61,7 @@ fn quick_window(app: &AppHandle) -> Option<WebviewWindow> {
         .shadow(true)
         .disable_drag_drop_handler()
         .visible(false);
-    if let Some(e) = effects(glass, Effect::Acrylic) {
+    if let Some(e) = effects(&core, Some(Effect::Acrylic)) {
         b = b.effects(e);
     }
     b.build().ok()
@@ -147,14 +158,47 @@ fn place_float_default(w: &WebviewWindow) {
     }
 }
 
-/// Glass on/off for windows that already exist (new windows read the setting when created).
+/// Backdrop for windows that already exist (new windows read the setting when created).
 pub fn apply_appearance(app: &AppHandle, core: &Arc<Core>) {
-    let glass = core.settings().glass;
-    for (label, effect) in [("main", Effect::Mica), ("quick", Effect::Acrylic)] {
+    for (label, fallback) in [("main", None), ("quick", Some(Effect::Acrylic))] {
         if let Some(w) = app.get_webview_window(label) {
-            let _ = w.set_effects(effects(glass, effect));
+            let _ = w.set_effects(effects(core, fallback));
         }
     }
+}
+
+/// Switches between the main window and the floating launcher. With `floatSwitch = swap`
+/// (default) the one being left is hidden; with `both` the main window stays open.
+pub fn switch_view(app: &AppHandle, core: &Arc<Core>, to_float: bool) {
+    let swap = core.settings().float_switch != "both";
+    if to_float {
+        if !core.settings().float_enabled {
+            let _ = core.mutate(true, |d| {
+                d.settings.float_enabled = true;
+                Ok(())
+            });
+        }
+        sync_float(app, core);
+        if swap {
+            hide_main(app);
+        }
+    } else {
+        show_main(app);
+        if swap {
+            let _ = core.mutate(true, |d| {
+                d.settings.float_enabled = false;
+                Ok(())
+            });
+            sync_float(app, core);
+        }
+    }
+}
+
+/// Main ⇄ floating, whichever is showing now.
+pub fn toggle_view(app: &AppHandle, core: &Arc<Core>) {
+    let main_visible = app.get_webview_window("main").and_then(|w| w.is_visible().ok()).unwrap_or(false);
+    let float_visible = app.get_webview_window("float").and_then(|w| w.is_visible().ok()).unwrap_or(false);
+    switch_view(app, core, main_visible || !float_visible);
 }
 
 pub fn on_event(window: &Window, event: &WindowEvent) {

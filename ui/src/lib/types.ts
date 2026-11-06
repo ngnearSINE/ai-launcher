@@ -8,6 +8,7 @@ export interface Settings {
   accent: string
   glass: boolean
   glassStrength: number
+  backgroundEffect: 'tabbed' | 'mica' | 'acrylic' | 'none'
   reduceMotion: boolean
   density: 'comfortable' | 'compact'
   cardUsageStyle: 'bars' | 'compact'
@@ -30,9 +31,12 @@ export interface Settings {
   floatAlwaysOnTop: boolean
   floatOpacity: number
   floatSnapEdges: boolean
-  floatShowUsage: boolean
+  floatRing: 'both' | '5h' | 'weekly' | 'tight' | 'none'
   floatSize: number
   floatPosition: [number, number] | null
+  floatSwitch: 'swap' | 'both'
+  floatHotkey: string
+  floatHotkeyEnabled: boolean
   taskbarSeparate: boolean
   taskbarBadge: boolean
   taskbarRelaunchThroughLauncher: boolean
@@ -41,6 +45,8 @@ export interface Settings {
   usageEnabled: boolean
   usageRefreshMinutes: number
   usageShowReset: boolean
+  usageValue: 'left' | 'used'
+  usageShowPace: boolean
   usageWarnPercent: number
   usageCritPercent: number
   notifyReset: boolean

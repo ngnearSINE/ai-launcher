@@ -1,0 +1,117 @@
+# Pushing a tag v1.2.3 builds the Windows installer and the Ubuntu deb/AppImage, signs the updater
+# artifacts and publishes them with latest.json to GitHub Releases. Installed launchers read
+# releases/latest/download/latest.json to update themselves.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)build, e.g. v0.1.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.id }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: tag
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Versions match the tag
+        run: |
+          v="${{ steps.tag.outputs.tag }}"; v="${v#v}"
+          conf=$(jq -r .version app/tauri.conf.json)
+          ui=$(jq -r .version ui/package.json)
+          cargo=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          echo "tag=$v tauri=$conf ui=$ui cargo=$cargo"
+          [ "$v" = "$conf" ] && [ "$v" = "$ui" ] && [ "$v" = "$cargo" ] || { echo "::error::version mismatch"; exit 1; }
+
+      - name: Release notes from CHANGELOG
+        run: |
+          v="${{ steps.tag.outputs.tag }}"; v="${v#v}"
+          section() { awk -v h="## $v" '$0==h{f=1;next} /^## /{f=0} f' "$1" 2>/dev/null; }
+          {
+            section CHANGELOG.md
+            en=$(section CHANGELOG.en.md)
+            if [ -n "$en" ]; then printf '\n## English\n%s\n' "$en"; fi
+            printf '\n'; sed "s/{version}/$v/g" docs/release-install.md 2>/dev/null
+          } > notes.md
+          cat notes.md
+
+      - id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "AI Launcher $tag" --notes-file notes.md --draft
+          fi
+          echo "id=$(gh api repos/${{ github.repository }}/releases --jq ".[] | select(.tag_name==\"$tag\") | .id" | head -1)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --bundles nsis
+          - os: ubuntu-22.04
+            args: --bundles deb,appimage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release.outputs.tag }}
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: UI
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: app
+          tauriScript: npx --prefix ../ui tauri
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }} --config tauri.release.conf.json
+
+  publish:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ needs.create-release.outputs.tag }}" -R ${{ github.repository }} --draft=false --latest

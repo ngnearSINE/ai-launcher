@@ -71,10 +71,8 @@ fn jobs(core: &Core) -> Vec<(String, std::path::PathBuf)> {
             if adapter.usage(install) != Some(UsageKind::ClaudeDesktop) || !effective(&data.settings, inst).usage_enabled {
                 return None;
             }
-            let dir = match inst.profile.dir() {
-                Some(d) => d.clone(),
-                None => adapter.default_profile_dir(install, &core.env)?,
-            };
+            // Exactly this instance's folder, resolved to where the app really wrote it.
+            let dir = launcher_core::catalog::physical_profile_dir(data, &core.registry, &core.env, inst)?;
             Some((inst.id.clone(), dir))
         })
         .collect()

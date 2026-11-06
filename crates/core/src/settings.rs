@@ -49,6 +49,8 @@ pub struct Settings {
     pub best_claude_hotkey: String,
     pub best_claude_hotkey_enabled: bool,
     pub tray_left_click: String,
+    /// `main` (default), `quick` or `none`.
+    pub tray_double_click: String,
 
     // Floating launcher
     pub float_enabled: bool,
@@ -80,7 +82,14 @@ pub struct Settings {
     pub delete_moves_to_trash: bool,
     pub delete_profile_by_default: bool,
     pub profiles_root: Option<String>,
+
+    // Updates
+    /// Check GitHub Releases in the background and download new versions.
     pub check_updates: bool,
+    /// Install a downloaded update during the nightly hour without asking.
+    pub auto_install_updates: bool,
+    /// Local hour (0–23) of the nightly install window.
+    pub update_hour: u8,
 }
 
 impl Default for Settings {
@@ -108,6 +117,7 @@ impl Default for Settings {
             best_claude_hotkey: "Alt+Shift+C".into(),
             best_claude_hotkey_enabled: false,
             tray_left_click: "popup".into(),
+            tray_double_click: "main".into(),
 
             float_enabled: false,
             float_orientation: "vertical".into(),
@@ -136,6 +146,8 @@ impl Default for Settings {
             delete_profile_by_default: false,
             profiles_root: None,
             check_updates: true,
+            auto_install_updates: true,
+            update_hour: 3,
         }
     }
 }
@@ -150,6 +162,7 @@ impl Settings {
         self.taskbar_rescan_seconds = self.taskbar_rescan_seconds.clamp(1, 30);
         self.usage_warn_percent = self.usage_warn_percent.min(100);
         self.usage_crit_percent = self.usage_crit_percent.clamp(self.usage_warn_percent, 100);
+        self.update_hour = self.update_hour.min(23);
         if !self.accent.starts_with('#') || self.accent.len() != 7 {
             self.accent = Settings::default().accent;
         }

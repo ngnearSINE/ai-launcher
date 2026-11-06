@@ -49,7 +49,12 @@ impl Env {
         let path = std::env::var_os("PATH")
             .map(|p| std::env::split_paths(&p).collect())
             .unwrap_or_default();
-        let launcher_data = local.join("AI Launcher");
+        // Profiles the launcher creates live outside AppData:
+        // - Store (MSIX) apps such as Claude have their AppData writes redirected into the
+        //   package's private LocalCache, where the launcher (and Explorer) would not find them;
+        // - the installer's program folder (%LOCALAPPDATA%\AI Launcher) must not hold sign-ins
+        //   that would go away with an uninstall.
+        let launcher_data = home.join(".ai-launcher");
         Self { os, home, config, local, program_files, path, launcher_data }
     }
 
@@ -59,6 +64,25 @@ impl Env {
         } else {
             name.to_string()
         }
+    }
+
+    /// Where a Store (MSIX) package's writes to `path` actually land when the package has
+    /// file-system write virtualization: `%LOCALAPPDATA%\Packages\<family>\LocalCache\Roaming|Local\…`.
+    /// `None` for paths outside AppData.
+    pub fn msix_virtual(&self, path: &Path, family: &str) -> Option<PathBuf> {
+        if self.os != Os::Windows {
+            return None;
+        }
+        let cache = self.local.join("Packages").join(family).join("LocalCache");
+        if let Some(rest) = strip_prefix_ci(path, &self.config) {
+            return Some(cache.join("Roaming").join(rest));
+        }
+        let rest = strip_prefix_ci(path, &self.local)?;
+        // Already inside a package's own folder: nothing to redirect.
+        if rest.components().next().map(|c| c.as_os_str().eq_ignore_ascii_case("Packages")).unwrap_or(false) {
+            return None;
+        }
+        Some(cache.join("Local").join(rest))
     }
 
     /// First existing file among candidates.
@@ -98,9 +122,45 @@ pub fn normalize_path(p: &Path, os: Os) -> String {
     s
 }
 
+/// `path` relative to `base`, comparing components case-insensitively (Windows paths).
+pub fn strip_prefix_ci(path: &Path, base: &Path) -> Option<PathBuf> {
+    let mut p = path.components();
+    for b in base.components() {
+        let c = p.next()?;
+        if !c.as_os_str().to_string_lossy().eq_ignore_ascii_case(&b.as_os_str().to_string_lossy()) {
+            return None;
+        }
+    }
+    Some(p.as_path().to_path_buf())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(windows)]
+    fn maps_msix_virtual_paths() {
+        let e = Env {
+            os: Os::Windows,
+            home: PathBuf::from(r"C:\Users\A"),
+            config: PathBuf::from(r"C:\Users\A\AppData\Roaming"),
+            local: PathBuf::from(r"C:\Users\A\AppData\Local"),
+            program_files: vec![],
+            path: vec![],
+            launcher_data: PathBuf::from(r"C:\Users\A\.ai-launcher"),
+        };
+        assert_eq!(
+            e.msix_virtual(Path::new(r"c:\users\a\appdata\roaming\Claude-Work"), "Claude_x"),
+            Some(PathBuf::from(r"C:\Users\A\AppData\Local\Packages\Claude_x\LocalCache\Roaming\Claude-Work"))
+        );
+        assert_eq!(
+            e.msix_virtual(Path::new(r"C:\Users\A\AppData\Local\Claude-Work"), "Claude_x"),
+            Some(PathBuf::from(r"C:\Users\A\AppData\Local\Packages\Claude_x\LocalCache\Local\Claude-Work"))
+        );
+        assert_eq!(e.msix_virtual(Path::new(r"C:\Users\A\.ai-launcher\profiles\Claude-Work"), "Claude_x"), None);
+        assert_eq!(e.msix_virtual(Path::new(r"C:\Users\A\AppData\Local\Packages\X\y"), "Claude_x"), None);
+    }
 
     #[test]
     fn normalizes_windows_paths() {

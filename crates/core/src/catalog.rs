@@ -27,6 +27,20 @@ pub struct SyncReport {
 pub fn sync(data: &mut StoreFile, reg: &Registry, env: &Env) -> SyncReport {
     let mut report = SyncReport::default();
 
+    // Profiles assigned under the old data folder (the installer's program folder) that were
+    // never created move to the current data folder.
+    let old_roots = [env.local.join("AI Launcher").join("profiles"), env.local.join("AI Launcher Data").join("profiles")];
+    for inst in data.instances.iter_mut() {
+        if let Profile::Dir { path, managed: true } = &mut inst.profile {
+            if path.exists() {
+                continue;
+            }
+            if let Some(rest) = old_roots.iter().find_map(|r| crate::env::strip_prefix_ci(path, r)) {
+                *path = env.launcher_data.join("profiles").join(rest);
+            }
+        }
+    }
+
     // 1. Installed apps.
     let detected: Vec<Installation> = reg.all().iter().flat_map(|a| a.detect(env)).collect();
     for found in &detected {
@@ -227,11 +241,36 @@ pub fn instance_data_paths(data: &StoreFile, reg: &Registry, env: &Env, inst: &I
     let mut out = vec![dir.clone()];
     if let Some(install) = data.installations.iter().find(|i| i.id == inst.installation_id) {
         if let Some(adapter) = reg.get(&install.adapter) {
+            out = adapter.profile_locations(install, dir, env);
             out.extend(adapter.companion_dirs(install, dir, env));
         }
     }
     out.retain(|p| p.exists());
+    out.dedup();
     out
+}
+
+/// The folder that really holds an instance's data (see `AppAdapter::resolve_profile_dir`),
+/// falling back to the app's default folder for default-profile instances.
+pub fn physical_profile_dir(data: &StoreFile, reg: &Registry, env: &Env, inst: &Instance) -> Option<PathBuf> {
+    let install = data.installations.iter().find(|i| i.id == inst.installation_id)?;
+    let adapter = reg.get(&install.adapter)?;
+    let logical = match inst.profile.dir() {
+        Some(d) => d.clone(),
+        None => adapter.default_profile_dir(install, env)?,
+    };
+    Some(adapter.resolve_profile_dir(install, &logical, env))
+}
+
+/// Remember a profile folder so the next scan does not offer it again (instance removed but
+/// its data kept).
+pub fn forget_profile(data: &mut StoreFile, env: &Env, inst: &Instance) {
+    if let Some(dir) = inst.profile.dir() {
+        let key = normalize_path(dir, env.os);
+        if !data.imported_profiles.contains(&key) {
+            data.imported_profiles.push(key);
+        }
+    }
 }
 
 /// Profiles can be placed under a user-chosen root (advanced setting) for apps whose adapter
@@ -318,7 +357,7 @@ mod tests {
 
         // New instance gets Claude-<slug> next to the default folder.
         let n = create_instance(&mut data, &reg, &e, "claude:classic", "Team A", None, true).unwrap();
-        assert_eq!(n.profile.dir().unwrap(), &e.config.join("Claude-Team-A"));
+        assert_eq!(n.profile.dir().unwrap(), &e.launcher_data.join("profiles").join("Claude-Team-A"));
         let ctx = ctx(&data, &e);
         let plan = reg.get("claude").unwrap().launch_plan(&data.installations[0], &n, &ctx).unwrap();
         assert!(plan.args[0].starts_with("--user-data-dir="));

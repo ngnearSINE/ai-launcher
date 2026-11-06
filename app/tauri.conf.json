@@ -23,11 +23,19 @@
         "decorations": false,
         "transparent": true,
         "shadow": true,
+        "dragDropEnabled": false,
         "windowEffects": { "effects": ["mica"] }
       }
     ],
     "security": {
       "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ5NkVBRDIzRTIwQkFENEYKUldSUHJRdmlJNjF1U2EzM0hUd3RUZml3eGhwYURqdHZkdVFvUVhJUXd4VGNBMyt1dEFOYXJ5Yy8K",
+      "endpoints": ["https://github.com/ngnearSINE/ai-launcher/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
     }
   },
   "bundle": {

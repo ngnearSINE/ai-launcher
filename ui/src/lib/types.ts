@@ -24,6 +24,7 @@ export interface Settings {
   bestClaudeHotkey: string
   bestClaudeHotkeyEnabled: boolean
   trayLeftClick: 'popup' | 'main'
+  trayDoubleClick: 'main' | 'quick' | 'none'
   floatEnabled: boolean
   floatOrientation: 'vertical' | 'horizontal'
   floatAlwaysOnTop: boolean
@@ -48,7 +49,19 @@ export interface Settings {
   deleteProfileByDefault: boolean
   profilesRoot: string | null
   checkUpdates: boolean
+  autoInstallUpdates: boolean
+  updateHour: number
 }
+
+export type UpdateState =
+  | { status: 'unsupported'; reason: 'dev' | 'portable' | 'package' | 'os' }
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'latest'; checkedAt: string }
+  | { status: 'downloading'; version: string; percent: number; notes: string | null }
+  | { status: 'ready'; version: string; notes: string | null }
+  | { status: 'installing' }
+  | { status: 'error'; message: 'network' | 'check' | 'download' | 'install'; checkedAt: string }
 
 export interface Brand {
   color: string
@@ -194,4 +207,5 @@ export interface Snapshot {
   instances: Instance[]
   presets: Preset[]
   configDir: string
+  update: UpdateState
 }

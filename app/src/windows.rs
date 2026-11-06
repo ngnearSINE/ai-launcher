@@ -48,6 +48,7 @@ fn quick_window(app: &AppHandle) -> Option<WebviewWindow> {
         .skip_taskbar(true)
         .always_on_top(true)
         .shadow(true)
+        .disable_drag_drop_handler()
         .visible(false);
     if let Some(e) = effects(glass, Effect::Acrylic) {
         b = b.effects(e);
@@ -121,6 +122,7 @@ pub fn sync_float(app: &AppHandle, core: &Arc<Core>) {
         .skip_taskbar(true)
         .always_on_top(s.float_always_on_top)
         .shadow(false)
+        .disable_drag_drop_handler()
         .focused(false)
         .visible(true);
     if let Some((x, y)) = s.float_position {

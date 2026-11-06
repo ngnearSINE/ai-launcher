@@ -138,7 +138,7 @@
           <p class="muted">{t('조건에 맞는 인스턴스가 없어요')}</p>
         </div>
       {:else}
-        <div class="cards" class:list={ui.layout === 'list'}>
+        <div class="cards" class:list={ui.layout === 'list'} role="list" ondragend={() => (dragId = null)}>
           {#each list as inst, i (inst.id)}
             <InstanceCard
               {inst}
@@ -147,7 +147,10 @@
               dragging={dragId === inst.id}
               ondragstart={(e) => {
                 dragId = inst.id
-                e.dataTransfer?.setData('text/plain', inst.id)
+                if (e.dataTransfer) {
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('text/plain', inst.id)
+                }
               }}
               ondrop={() => onDrop(inst.id)}
             />

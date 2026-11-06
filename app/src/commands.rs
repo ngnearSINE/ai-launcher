@@ -52,7 +52,28 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         launch_best_claude,
         quit_app,
         app_icons,
+        check_update,
+        install_update,
     ]
+}
+
+#[tauri::command]
+async fn check_update(core: State<'_, Arc<Core>>) -> Res<()> {
+    let core = core.inner().clone();
+    // A manual check clears a previous error or "latest" so it runs again.
+    {
+        let mut s = core.update.lock();
+        if matches!(*s, crate::updater::UpdateState::Error { .. } | crate::updater::UpdateState::Latest { .. }) {
+            *s = crate::updater::UpdateState::Idle;
+        }
+    }
+    crate::updater::check(&core, true).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn install_update(core: State<'_, Arc<Core>>) -> Res<bool> {
+    Ok(crate::updater::install(core.inner()).await)
 }
 
 #[tauri::command]
@@ -170,6 +191,9 @@ fn delete_instance(core: C, id: String, delete_data: bool) -> Res<Vec<String>> {
     }
     core.mutate(true, |d| {
         d.instances.retain(|i| i.id != id);
+        if !delete_data {
+            catalog::forget_profile(d, &core.env, &inst);
+        }
         Ok(())
     })?;
     let _ = std::fs::remove_file(crate::shortcuts::start_menu_path(&core, &inst));

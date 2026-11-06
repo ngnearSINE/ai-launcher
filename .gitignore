@@ -1,0 +1,11 @@
+# .agents/ itself is tracked locally (excluded from the public repo via .git/info/exclude).
+.agents/scratches/
+__pycache__/
+*.log
+
+# Build output and dependencies (built outside the synced folder by local-build.ps1)
+target/
+node_modules/
+ui/dist/
+app/gen/
+release/

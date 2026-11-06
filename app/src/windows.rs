@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use tauri::window::{Effect, EffectsBuilder};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 
 use crate::core::Core;
 
@@ -142,18 +142,57 @@ pub fn sync_float(app: &AppHandle, core: &Arc<Core>) {
     match b.build() {
         Ok(w) => {
             if s.float_position.is_none() {
-                place_float_default(&w);
+                place_float_default(&w, size + 20.0, size * 3.0);
             }
         }
         Err(e) => log::warn!("float window: {e}"),
     }
 }
 
-fn place_float_default(w: &WebviewWindow) {
-    if let (Ok(Some(m)), Ok(size)) = (w.current_monitor(), w.outer_size()) {
+/// First placement: right edge of the work area, vertically centred. Uses the requested size,
+/// because a just-created window may still report 0×0 (Linux).
+fn place_float_default(w: &WebviewWindow, width: f64, height: f64) {
+    let scale = w.scale_factor().unwrap_or(1.0);
+    let (pw, ph) = ((width * scale).round() as i32, (height * scale).round() as i32);
+    if let Ok(Some(m)) = w.current_monitor().or_else(|_| w.primary_monitor()) {
         let a = m.work_area();
-        let x = a.position.x + a.size.width as i32 - size.width as i32 - 16;
-        let y = a.position.y + (a.size.height as i32 - size.height as i32) / 2;
+        let x = a.position.x + a.size.width as i32 - pw - (16.0 * scale) as i32;
+        let y = a.position.y + (a.size.height as i32 - ph) / 2;
+        let _ = w.set_position(PhysicalPosition::new(x, y));
+    }
+}
+
+/// Resizes the floating launcher to its content (logical px) without letting it leave the
+/// screen: it keeps the edge it sits nearer to (a strip on the right grows to the left), then
+/// stays inside the monitor's work area.
+pub fn fit_float(w: &WebviewWindow, width: f64, height: f64) {
+    let scale = w.scale_factor().unwrap_or(1.0);
+    let (nw, nh) = ((width * scale).round() as i32, (height * scale).round() as i32);
+    let old_pos = w.outer_position().ok();
+    let old_size = w.outer_size().ok().filter(|s| s.width > 1 && s.height > 1);
+    // GTK ignores resizes of a non-resizable window (it stays at least 200 px wide), and the
+    // builder's setting does not stick on Linux; switch it on here before resizing.
+    #[cfg(target_os = "linux")]
+    if !w.is_resizable().unwrap_or(true) {
+        let _ = w.set_resizable(true);
+    }
+    let _ = w.set_size(PhysicalSize::new(nw.max(1) as u32, nh.max(1) as u32));
+    let Ok(Some(m)) = w.current_monitor().or_else(|_| w.primary_monitor()) else { return };
+    let a = m.work_area();
+    let (ax, ay, aw, ah) = (a.position.x, a.position.y, a.size.width as i32, a.size.height as i32);
+    let (mut x, mut y) = match (old_pos, old_size) {
+        (Some(p), Some(s)) => {
+            let (ow, oh) = (s.width as i32, s.height as i32);
+            let right = p.x + ow / 2 > ax + aw / 2;
+            let bottom = p.y + oh / 2 > ay + ah / 2;
+            (if right { p.x + ow - nw } else { p.x }, if bottom { p.y + oh - nh } else { p.y })
+        }
+        (Some(p), None) => (p.x, p.y),
+        _ => (ax + aw - nw, ay + (ah - nh) / 2),
+    };
+    x = x.clamp(ax, (ax + aw - nw).max(ax));
+    y = y.clamp(ay, (ay + ah - nh).max(ay));
+    if old_pos.map(|p| (p.x, p.y)) != Some((x, y)) {
         let _ = w.set_position(PhysicalPosition::new(x, y));
     }
 }

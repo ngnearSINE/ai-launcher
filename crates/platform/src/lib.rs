@@ -2,7 +2,10 @@
 //! Callers pass plain data (pids, paths, strings); nothing here knows about instances.
 
 pub mod badge;
+pub mod command;
 pub mod process;
+
+pub use command::host_command;
 
 #[cfg(windows)]
 pub mod win;
@@ -38,6 +41,20 @@ pub fn installed_web_apps() -> Vec<WebAppShortcut> {
     #[cfg(not(any(windows, target_os = "linux")))]
     {
         Vec::new()
+    }
+}
+
+/// A PNG icon for an installed program: Linux looks it up through the `.desktop` entry that
+/// starts `exe` and the icon theme. Windows reads icons from the executable instead.
+pub fn desktop_icon(exe: &std::path::Path) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::icon_for_exe(exe)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = exe;
+        None
     }
 }
 

@@ -14,7 +14,7 @@
 | 종류 | 예 | 계정 분리 방법 |
 | --- | --- | --- |
 | Claude 데스크톱 | Windows Store판·설치판, Ubuntu `claude-desktop` | `--user-data-dir` |
-| Electron 앱 | Orca, Cursor, Poe, Grok Bot, 경로로 추가한 Electron 앱 | `--user-data-dir` |
+| Electron 앱 | Orca, Cursor(Ubuntu AppImage 포함), Poe, Grok Bot, Grok Desktop(Ubuntu), 경로로 추가한 Electron 앱 | `--user-data-dir` |
 | 웹앱 | Chrome에 설치한 웹앱(Gemini, Grok, ChatGPT 등), Claude 웹, Perplexity, 직접 입력 | 기본 인스턴스는 설치된 웹앱 그대로, 추가 계정은 브라우저 데이터 폴더 + 앱 창 |
 | 그 밖의 프로그램 | 경로로 추가 | 실행만 관리(원하면 `--user-data-dir` 켜기) |
 

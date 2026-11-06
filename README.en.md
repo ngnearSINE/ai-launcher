@@ -14,7 +14,7 @@ Run several accounts of Claude Desktop and other AI apps side by side, on Window
 | Kind | Examples | Isolation |
 | --- | --- | --- |
 | Claude Desktop | Windows Store / installer builds, Ubuntu `claude-desktop` | `--user-data-dir` |
-| Electron apps | Orca, Cursor, Poe, Grok Bot, any Electron app added by path | `--user-data-dir` |
+| Electron apps | Orca, Cursor (incl. the Ubuntu AppImage), Poe, Grok Bot, Grok Desktop (Ubuntu), any Electron app added by path | `--user-data-dir` |
 | Web apps | Chrome-installed web apps (Gemini, Grok, ChatGPT…), Claude web, Perplexity, custom URL | default: the installed web app as is; extra accounts: browser data folder + app window |
 | Other programs | added by path | launch only (opt in to `--user-data-dir`) |
 

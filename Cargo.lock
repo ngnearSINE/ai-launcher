@@ -2250,6 +2250,7 @@ dependencies = [
  "base64 0.22.1",
  "cbc",
  "chrono",
+ "launcher-platform",
  "log",
  "pbkdf2",
  "reqwest 0.12.28",

@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -319,7 +319,7 @@ impl Core {
 
 /// Starts the program detached from the launcher (closing the launcher leaves it running).
 fn spawn(plan: &LaunchPlan) -> std::io::Result<u32> {
-    let mut c = Command::new(&plan.program);
+    let mut c = launcher_platform::host_command(&plan.program);
     c.args(&plan.args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     for (k, v) in &plan.env {
         c.env(k, v);

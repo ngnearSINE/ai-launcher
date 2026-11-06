@@ -32,6 +32,11 @@
     email || [install?.name !== inst.alias ? install?.name : '', webHost].filter(Boolean).join(' · ') || install?.name || '',
   )
 
+  const metaText = $derived(
+    inst.note ||
+      (inst.lastLaunchedAt ? t('마지막 실행 {time}', { time: ago(inst.lastLaunchedAt, ui.now) }) : t('런처로 실행한 적 없음')),
+  )
+
   function primary() {
     if (missing) return
     if (inst.running) run(api.focus(inst.id))
@@ -97,9 +102,8 @@
           {#if sev}<span class="pill {sev}"><i></i>{paceHot ? t('속도 주의') : t('여유 부족')}</span>{/if}
         {/if}
       </span>
-      <span class="meta truncate">
-        {#if inst.note}{inst.note}{:else if inst.lastLaunchedAt}{t('마지막 실행 {time}', { time: ago(inst.lastLaunchedAt, ui.now) })}{:else}{t('런처로 실행한 적 없음')}{/if}
-      </span>
+      <!-- While it runs the pills say enough; the launch history only fills the space when idle. -->
+      <span class="meta truncate" title={metaText}>{inst.running && !inst.note ? '' : metaText}</span>
       <button
         class="btn sm act"
         class:primary={!inst.running}

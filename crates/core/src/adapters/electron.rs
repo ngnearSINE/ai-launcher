@@ -37,7 +37,7 @@ const KNOWN: &[Known] = &[
         logo: "grok",
         color: "#A1A1AA",
         win: &["Programs/Grok Bot/Grok Bot.exe"],
-        linux: &["/opt/Grok Bot/grok-bot"],
+        linux: &["/opt/Grok Bot/grok-bot", "/usr/bin/grok-bot"],
     },
     Known {
         id: "poe",
@@ -56,7 +56,17 @@ const KNOWN: &[Known] = &[
         logo: "cursor",
         color: "#8E8E93",
         win: &["Programs/cursor/Cursor.exe"],
-        linux: &["/usr/bin/cursor", "/opt/Cursor/cursor"],
+        // The Linux build is usually an AppImage, which passes its arguments on.
+        linux: &["/usr/bin/cursor", "/opt/Cursor/cursor", "/opt/cursor.appimage", "/opt/cursor/cursor.appimage"],
+    },
+    Known {
+        id: "grok-desktop",
+        name: "Grok Desktop",
+        data_dir: "Grok-Desktop",
+        logo: "grok",
+        color: "#A1A1AA",
+        win: &[],
+        linux: &["/opt/Grok Desktop/grok-desktop", "/usr/bin/grok-desktop"],
     },
 ];
 
@@ -81,6 +91,12 @@ pub fn looks_like_electron(exe: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// An Electron executable (after following links) or an AppImage, which bundles one.
+fn is_electron_program(p: &Path) -> bool {
+    let appimage = p.extension().map(|e| e.eq_ignore_ascii_case("appimage")).unwrap_or(false);
+    appimage || looks_like_electron(&std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()))
+}
+
 impl AppAdapter for ElectronAdapter {
     fn kind(&self) -> &'static str {
         "electron"
@@ -91,7 +107,9 @@ impl AppAdapter for ElectronAdapter {
         for k in KNOWN {
             let found = match env.os {
                 Os::Windows => Env::first_file(k.win.iter().map(|rel| env.local.join(rel))),
-                _ => Env::first_file(k.linux.iter().map(PathBuf::from)),
+                // `/usr/bin/<name>` may be an unrelated program with the same name (Ubuntu's
+                // `orca` is the screen reader), so a Linux path counts only if it is Electron.
+                _ => k.linux.iter().map(PathBuf::from).find(|p| p.is_file() && is_electron_program(p)),
             };
             if let Some(exe) = found {
                 out.push(electron_install(format!("electron:{}", k.id), k.name, exe, k.data_dir, k.logo, k.color));
@@ -133,8 +151,10 @@ impl AppAdapter for ElectronAdapter {
     }
 
     fn matcher(&self, install: &Installation, instance: &Instance, ctx: &Ctx) -> ProcessMatcher {
+        // An AppImage (`cursor.appimage`) runs as the program inside it (`cursor`).
         let name = install.exe.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        data_dir_matcher(&[name.as_str()], instance, ctx.env)
+        let stem = install.exe.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        data_dir_matcher(&[name.as_str(), stem.as_str()], instance, ctx.env)
     }
 
     fn brand(&self, install: &Installation) -> Brand {

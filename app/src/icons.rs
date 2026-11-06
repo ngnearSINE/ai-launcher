@@ -21,8 +21,12 @@ fn extract(exe: &Path, out: &Path) -> bool {
 }
 
 #[cfg(not(windows))]
-fn extract(_exe: &Path, _out: &Path) -> bool {
-    false
+fn extract(exe: &Path, out: &Path) -> bool {
+    let Some(src) = launcher_platform::desktop_icon(exe) else { return false };
+    if let Some(dir) = out.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    std::fs::copy(src, out).is_ok()
 }
 
 /// `installation id → data URL`. Web apps have no executable icon and are drawn by the UI.

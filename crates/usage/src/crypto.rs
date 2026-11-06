@@ -96,7 +96,7 @@ for f in (via_gi, via_dbus):
 if not pw: sys.exit(1)
 sys.stdout.write(base64.b64encode(pw.encode('utf8')).decode())
 "#;
-        let out = std::process::Command::new("python3")
+        let out = launcher_platform::host_command("python3")
             .args(["-c", SCRIPT, app])
             .stderr(std::process::Stdio::null())
             .output()

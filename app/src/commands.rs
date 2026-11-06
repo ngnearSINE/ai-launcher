@@ -8,7 +8,7 @@ use launcher_core::adapters::webapp::{preset_install, webapp_install, PRESETS};
 use launcher_core::catalog;
 use launcher_core::{new_id, Group, Installation, Instance, Settings};
 use serde_json::Value;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::core::Core;
 use crate::snapshot::{self, Snapshot};
@@ -56,7 +56,17 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         install_update,
         add_installed_web_app,
         switch_view,
+        fit_float,
     ]
+}
+
+/// The floating launcher's size for its content, kept on screen (logical px).
+#[tauri::command]
+async fn fit_float(app: AppHandle, width: f64, height: f64) -> Res<()> {
+    if let Some(w) = app.get_webview_window("float") {
+        crate::windows::fit_float(&w, width, height);
+    }
+    Ok(())
 }
 
 /// `to`: `float` or `main`. Async: it may create the floating window.

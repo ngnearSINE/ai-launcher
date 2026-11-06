@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
   import { flip } from 'svelte/animate'
   import { api } from '../lib/api'
   import { instanceMenu, launch, openSettings } from '../lib/actions'
@@ -33,7 +32,7 @@
     const n = Math.max(1, list.length)
     const along = 30 + n * cell + 8
     const across = cell + 12
-    getCurrentWindow().setSize(new LogicalSize(vertical ? across : along, vertical ? along : across))
+    api.fitFloat(vertical ? across : along, vertical ? along : across)
   })
 
   function rings(inst: Instance) {

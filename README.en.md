@@ -1,6 +1,6 @@
 # AI Launcher
 
-Run several accounts of Claude Desktop and other AI apps side by side, on Windows and Ubuntu.
+Run several accounts of Claude Desktop and other AI apps side by side, on Windows and Ubuntu (x64 and arm64).
 
 - **One instance per account** — each instance has its own data folder, so sign-ins never mix.
 - **Pin each one separately** (Windows) — every instance gets its own taskbar button; a pinned button starts exactly that instance.

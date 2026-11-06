@@ -40,6 +40,16 @@ const KNOWN: &[Known] = &[
         linux: &["/opt/Grok Bot/grok-bot"],
     },
     Known {
+        id: "poe",
+        name: "Poe",
+        data_dir: "Poe",
+        logo: "poe",
+        color: "#5D5CDE",
+        // Squirrel install: the stub forwards its arguments to the newest app-<version>\Poe.exe.
+        win: &["Poe/Poe.exe"],
+        linux: &[],
+    },
+    Known {
         id: "cursor",
         name: "Cursor",
         data_dir: "Cursor",
@@ -59,9 +69,15 @@ fn electron_install(id: String, name: &str, exe: PathBuf, data_dir: &str, logo: 
 }
 
 /// An Electron app ships `resources/app.asar` (or an unpacked `resources/app`) next to its exe.
+/// Squirrel installs (`%LOCALAPPDATA%\<App>\<App>.exe`) keep it under `app-<version>\resources`.
 pub fn looks_like_electron(exe: &Path) -> bool {
-    exe.parent()
-        .map(|d| d.join("resources").join("app.asar").is_file() || d.join("resources").join("app").is_dir())
+    let has = |d: &Path| d.join("resources").join("app.asar").is_file() || d.join("resources").join("app").is_dir();
+    let Some(dir) = exe.parent() else { return false };
+    if has(dir) {
+        return true;
+    }
+    std::fs::read_dir(dir)
+        .map(|rd| rd.flatten().any(|e| e.file_name().to_string_lossy().starts_with("app-") && has(&e.path())))
         .unwrap_or(false)
 }
 

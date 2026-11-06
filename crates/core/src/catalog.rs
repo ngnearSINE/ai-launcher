@@ -384,6 +384,12 @@ mod tests {
         std::fs::write(extra.join("config.json"), b"{}").unwrap();
         std::fs::create_dir_all(e.config.join("Claude-3p")).unwrap();
         std::fs::write(e.config.join("Claude-3p").join("config.json"), b"{}").unwrap();
+        // Squirrel-style Electron app (stub + app-<version>\resources\app.asar).
+        let poe = e.local.join("Poe");
+        std::fs::create_dir_all(poe.join("app-1.1.40").join("resources")).unwrap();
+        std::fs::write(poe.join("Poe.exe"), b"").unwrap();
+        std::fs::write(poe.join("app-1.1.40").join("resources").join("app.asar"), b"").unwrap();
+        assert!(crate::adapters::electron::looks_like_electron(&poe.join("Poe.exe")));
         let chrome = e.program_files[0].join("Google/Chrome/Application");
         std::fs::create_dir_all(&chrome).unwrap();
         std::fs::write(chrome.join("chrome.exe"), b"").unwrap();
@@ -402,6 +408,7 @@ mod tests {
         let mut data = StoreFile::default();
         let r = sync(&mut data, &reg, &e);
         assert!(r.added_installations.contains(&"claude:classic".to_string()));
+        assert!(r.added_installations.contains(&"electron:poe".to_string()));
         assert!(r.added_installations.contains(&"pwa:kidh".to_string()), "AI web apps register themselves");
         assert!(!r.added_installations.contains(&"pwa:hmjk".to_string()), "other web apps are only offered");
         assert!(data.installations.iter().find(|i| i.id == "chromium:chrome").unwrap().hidden, "browsers are hidden");

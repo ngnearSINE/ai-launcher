@@ -5,18 +5,17 @@ Run several accounts of Claude Desktop and other AI apps side by side, on Window
 - **One instance per account** — each instance has its own data folder, so sign-ins never mix.
 - **Pin each one separately** (Windows) — every instance gets its own taskbar button; a pinned button starts exactly that instance.
 - **Usage cards** — Claude 5-hour, weekly, per-model (e.g. Fable) and credit usage, read **only from that instance's own sign-in**.
-- **Auto-detect + add by path** — Claude, Chrome, Edge, Orca and Cursor in their default locations are registered automatically; anything else can be added by path.
-- **Web apps** — Gemini, Grok, ChatGPT and others as app windows, each with its own browser data folder.
-- **Quick launch, tray and floating launcher** — global hotkey (`Alt+Shift+Space`) → type → Enter; launch from the tray menu; optional always-on-top icon strip.
+- **Auto-detect + add by path** — Claude, Orca, Cursor, Poe and Grok Bot in their default locations, plus AI web apps installed from Chrome, are registered automatically; anything else can be added by path.
+- **Web apps** — web apps you installed from Chrome (Gemini, Grok…) open as the default instance with your usual profile; other accounts get app windows with their own browser data folder. Chrome and Edge themselves are not shown as cards.
+- **Quick launch, tray and floating launcher** — global hotkey (`Alt+Shift+Space`) → type → Enter; launch from the tray menu; or switch to an always-on-top icon strip with usage rings (title-bar button or `Alt+Shift+F`).
 
 ## Supported apps
 
 | Kind | Examples | Isolation |
 | --- | --- | --- |
 | Claude Desktop | Windows Store / installer builds, Ubuntu `claude-desktop` | `--user-data-dir` |
-| Electron apps | Orca, Cursor, Grok Bot, any Electron app added by path | `--user-data-dir` |
-| Chromium browsers | Chrome, Edge, Brave, Chromium | `--user-data-dir` |
-| Web apps | Gemini, Grok, ChatGPT, Claude web, Perplexity, custom URL | browser data folder + app window |
+| Electron apps | Orca, Cursor, Poe, Grok Bot, any Electron app added by path | `--user-data-dir` |
+| Web apps | Chrome-installed web apps (Gemini, Grok, ChatGPT…), Claude web, Perplexity, custom URL | default: the installed web app as is; extra accounts: browser data folder + app window |
 | Other programs | added by path | launch only (opt in to `--user-data-dir`) |
 
 ## Usage

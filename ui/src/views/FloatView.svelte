@@ -1,10 +1,12 @@
 <script lang="ts">
   import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
+  import { flip } from 'svelte/animate'
   import { api } from '../lib/api'
   import { instanceMenu, launch, openSettings } from '../lib/actions'
   import { t } from '../lib/i18n.svelte'
   import { pct, until } from '../lib/format'
   import { openMenu, run, settings, ui, visibleInstances } from '../lib/state.svelte'
+  import { createSortable, mergeOrder } from '../lib/sortable.svelte'
   import { levelOf, mainOrg, ringBox, ringWindows, windowsOf } from '../lib/usage'
   import type { Instance } from '../lib/types'
   import Avatar from '../components/Avatar.svelte'
@@ -14,6 +16,13 @@
   // both = outer weekly + inner 5-hour, or one of 5-hour / weekly / whichever is tighter.
   const s = $derived(settings())
   const list = $derived(visibleInstances({ forQuick: true }))
+  // Drag icons to reorder; the order is the same one the main window uses.
+  const sorter = createSortable({
+    ids: () => list.map((i) => i.id),
+    commit: (ids) => run(api.reorder(mergeOrder((ui.snap?.instances ?? []).map((i) => i.id), ids))),
+    enabled: () => s.sort === 'manual',
+  })
+  const shown = $derived(sorter.arrange(list, (i) => i.id))
   const vertical = $derived(s.floatOrientation === 'vertical')
   const size = $derived(s.floatSize)
   // Every cell is as big as the largest ring set, so icons line up whether or not they have usage.
@@ -72,10 +81,14 @@
       <Icon name="external" size={12} />
     </button>
   </div>
-  {#each list as inst (inst.id)}
+  {#each shown as inst (inst.id)}
     <button
       class="cell"
       class:on={inst.running}
+      class:sort-placeholder={sorter.st.dragging === inst.id}
+      data-sort-id={inst.id}
+      animate:flip={{ duration: s.reduceMotion ? 0 : 200 }}
+      onpointerdown={(e) => sorter.down(e, inst.id)}
       style:--cell="{cell}px"
       onclick={() => click(inst)}
       oncontextmenu={(e) => {

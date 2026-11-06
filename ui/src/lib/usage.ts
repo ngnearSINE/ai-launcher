@@ -91,6 +91,13 @@ export function ringWindows(org: OrgUsage | undefined, s: Settings): Win[] {
   }
 }
 
+/** Grid rows a card spans: plain cards 1, usage cards 2, or 3 with several organisations/limits. */
+export function cardSpan(inst: Instance, hasUsage: boolean): number {
+  if (!hasUsage) return 1
+  const org = mainOrg(inst)
+  return (inst.usage?.report?.orgs.length ?? 0) > 1 || (org?.quotas.length ?? 0) > 3 ? 3 : 2
+}
+
 /** Ring geometry (100×100 viewBox): stroke, gap, and the outer box that keeps every ring
  *  clear of an icon of `size` px. */
 export const RING = { stroke: 6, gap: 2.5, margin: 1, clearance: 2.5 }

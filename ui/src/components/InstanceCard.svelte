@@ -10,14 +10,7 @@
   import Icon from './Icon.svelte'
   import UsageMeters from './UsageMeters.svelte'
 
-  let {
-    inst,
-    list = false,
-    index = 0,
-    dragging = false,
-    ondragstart,
-    ondrop,
-  }: { inst: Instance; list?: boolean; index?: number; dragging?: boolean; ondragstart?: (e: DragEvent) => void; ondrop?: (e: DragEvent) => void } = $props()
+  let { inst, list = false, index = 0 }: { inst: Instance; list?: boolean; index?: number } = $props()
 
   const install = $derived(installationOf(inst))
   const org = $derived(mainOrg(inst))
@@ -38,9 +31,6 @@
   const identity = $derived(
     email || [install?.name !== inst.alias ? install?.name : '', webHost].filter(Boolean).join(' · ') || install?.name || '',
   )
-  // Rows a card spans in the grid: usage cards are taller, so short cards pack beside them.
-  const span = $derived(!install?.hasUsage ? 1 : (inst.usage?.report?.orgs.length ?? 0) > 1 || (org?.quotas.length ?? 0) > 3 ? 3 : 2)
-  let over = $state(false)
 
   function primary() {
     if (missing) return
@@ -57,26 +47,12 @@
   class="card {sev}"
   class:list
   class:missing
-  class:dragging
-  class:over
-  style:grid-row="span {list ? 1 : span}"
   role="button"
   tabindex="0"
-  draggable={ui.snap?.settings.sort === 'manual'}
   data-index={index}
   onclick={primary}
   onkeydown={onkey}
   oncontextmenu={(e) => instanceMenu(e, inst)}
-  {ondragstart}
-  ondragover={(e) => {
-    e.preventDefault()
-    over = true
-  }}
-  ondragleave={() => (over = false)}
-  ondrop={(e) => {
-    over = false
-    ondrop?.(e)
-  }}
 >
   <div class="head">
     <Avatar {inst} size={list ? 30 : 38} />
@@ -148,6 +124,7 @@
     flex-direction: column;
     gap: 12px;
     min-height: 0;
+    height: 100%;
     padding: 14px 14px 12px 16px;
     border-radius: var(--r-card);
     background: var(--surface);
@@ -188,12 +165,6 @@
   }
   .card.missing {
     opacity: 0.6;
-  }
-  .card.dragging {
-    opacity: 0.4;
-  }
-  .card.over {
-    border-color: var(--accent);
   }
   .head {
     display: flex;

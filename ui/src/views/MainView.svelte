@@ -1,10 +1,13 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { onMount } from 'svelte'
+  import { flip } from 'svelte/animate'
   import { api } from '../lib/api'
   import { deleteInstance, edit, launch, listenUiActions, newInstance } from '../lib/actions'
   import { t } from '../lib/i18n.svelte'
-  import { dialogs, run, ui, visibleInstances } from '../lib/state.svelte'
+  import { dialogs, installationOf, run, ui, visibleInstances } from '../lib/state.svelte'
+  import { createSortable, mergeOrder } from '../lib/sortable.svelte'
+  import { cardSpan } from '../lib/usage'
   import Icon from '../components/Icon.svelte'
   import InstanceCard from '../components/InstanceCard.svelte'
   import InstanceDrawer from '../components/InstanceDrawer.svelte'
@@ -14,10 +17,19 @@
 
   const win = getCurrentWindow()
   let searchEl = $state<HTMLInputElement | null>(null)
-  let dragId = $state<string | null>(null)
+  let contentEl = $state<HTMLElement | null>(null)
 
-  const list = $derived(visibleInstances())
   const snap = $derived(ui.snap!)
+  const list = $derived(visibleInstances())
+  // Drag to reorder (manual sort only): ghost + placeholder + sliding cards.
+  const sorter = createSortable({
+    ids: () => list.map((i) => i.id),
+    commit: (ids) => run(api.reorder(mergeOrder(snap.instances.map((i) => i.id), ids))),
+    enabled: () => snap.settings.sort === 'manual',
+    scroller: () => contentEl,
+  })
+  const shown = $derived(sorter.arrange(list, (i) => i.id))
+  const flipMs = $derived(snap.settings.reduceMotion ? 0 : 220)
   const runningCount = $derived(snap.instances.filter((i) => i.running).length)
   // A few state filters as chips; apps go in one dropdown instead of a chip each.
   const filters = $derived([
@@ -38,16 +50,6 @@
   function setLayout(l: 'grid' | 'list') {
     ui.layout = l
     localStorage.setItem('layout', l)
-  }
-
-  function onDrop(target: string) {
-    if (!dragId || dragId === target) return
-    const ids = snap.instances.map((i) => i.id)
-    const from = ids.indexOf(dragId)
-    const to = ids.indexOf(target)
-    ids.splice(to, 0, ids.splice(from, 1)[0])
-    dragId = null
-    run(api.reorder(ids))
   }
 
   function typing(e: KeyboardEvent) {
@@ -138,7 +140,7 @@
       </div>
     </div>
 
-    <main class="content">
+    <main class="content" bind:this={contentEl}>
       {#if !snap.instances.length}
         <div class="empty">
           <img src="/icon.png" alt="" />
@@ -154,22 +156,19 @@
           <p class="muted">{t('조건에 맞는 인스턴스가 없어요')}</p>
         </div>
       {:else}
-        <div class="cards" class:list={ui.layout === 'list'} role="list" ondragend={() => (dragId = null)}>
-          {#each list as inst, i (inst.id)}
-            <InstanceCard
-              {inst}
-              index={i}
-              list={ui.layout === 'list'}
-              dragging={dragId === inst.id}
-              ondragstart={(e) => {
-                dragId = inst.id
-                if (e.dataTransfer) {
-                  e.dataTransfer.effectAllowed = 'move'
-                  e.dataTransfer.setData('text/plain', inst.id)
-                }
-              }}
-              ondrop={() => onDrop(inst.id)}
-            />
+        <div class="cards" class:list={ui.layout === 'list'} role="list">
+          {#each shown as inst, i (inst.id)}
+            <div
+              class="slot"
+              role="listitem"
+              class:sort-placeholder={sorter.st.dragging === inst.id}
+              data-sort-id={inst.id}
+              style:grid-row="span {ui.layout === 'list' ? 1 : cardSpan(inst, !!installationOf(inst)?.hasUsage)}"
+              animate:flip={{ duration: flipMs }}
+              onpointerdown={(e) => sorter.down(e, inst.id)}
+            >
+              <InstanceCard {inst} index={i} list={ui.layout === 'list'} />
+            </div>
           {/each}
         </div>
       {/if}
@@ -330,6 +329,10 @@
     grid-auto-rows: auto;
     grid-auto-flow: row;
     gap: 8px;
+  }
+  .slot {
+    min-width: 0;
+    min-height: 0;
   }
   .app-filter {
     width: auto;

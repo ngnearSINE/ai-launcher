@@ -67,6 +67,33 @@ textarea {
   background: transparent;
 }
 
+/* reordering (lib/sortable): lifted ghost, dashed slot left behind */
+.sort-ghost {
+  transform-origin: center;
+  transition-property: transform, box-shadow, scale, rotate, opacity;
+}
+.sort-ghost.lifted {
+  scale: 1.035;
+  rotate: 0.6deg;
+  opacity: 0.96;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32), 0 4px 12px rgba(0, 0, 0, 0.18) !important;
+  transition: scale 160ms ease, rotate 160ms ease, box-shadow 160ms ease !important;
+}
+.sort-placeholder {
+  border-radius: var(--r-card);
+  background: var(--accent-softer);
+  outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -2px;
+}
+.sort-placeholder > * {
+  visibility: hidden;
+}
+body.is-sorting,
+body.is-sorting * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
 /* shared controls */
 .btn {
   display: inline-flex;

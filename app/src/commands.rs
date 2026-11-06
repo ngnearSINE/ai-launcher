@@ -54,7 +54,26 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         app_icons,
         check_update,
         install_update,
+        add_installed_web_app,
     ]
+}
+
+/// Adds an installed browser web app (from the Start menu) with its default instance.
+#[tauri::command]
+fn add_installed_web_app(core: C, app_id: String) -> Res<String> {
+    let p = core.web_apps.lock().iter().find(|p| p.app_id == app_id).cloned().ok_or("not-a-file")?;
+    core.mutate(true, |d| {
+        let browsers: Vec<Installation> = d.installations.iter().filter(|i| i.adapter == "chromium").cloned().collect();
+        let install = launcher_core::adapters::webapp::pwa_install(&p, &browsers, &core.env);
+        let id = install.id.clone();
+        d.dismissed.retain(|x| x != &id);
+        if !d.installations.iter().any(|i| i.id == id) {
+            let alias = install.name.clone();
+            d.installations.push(install);
+            catalog::create_instance(d, &core.registry, &core.env, &id, &alias, None, true)?;
+        }
+        Ok(id)
+    })
 }
 
 #[tauri::command]

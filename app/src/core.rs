@@ -48,6 +48,8 @@ pub struct Core {
     pub http: launcher_usage::reqwest::Client,
     pub config_dir: PathBuf,
     pub update: Mutex<crate::updater::UpdateState>,
+    /// Installed web apps seen at the last scan (offered in "Add app").
+    pub web_apps: Mutex<Vec<launcher_core::env::PwaShortcut>>,
     pub update_pending: tokio::sync::Mutex<Option<crate::updater::Pending>>,
     monitor_tx: Mutex<Sender<()>>,
     pub monitor_rx: Mutex<Option<Receiver<()>>>,
@@ -76,6 +78,7 @@ impl Core {
             http,
             config_dir,
             update: Mutex::new(crate::updater::UpdateState::Idle),
+            web_apps: Mutex::new(Vec::new()),
             update_pending: tokio::sync::Mutex::new(None),
             monitor_tx: Mutex::new(tx),
             monitor_rx: Mutex::new(Some(rx)),
@@ -94,11 +97,23 @@ impl Core {
         self.env.launcher_data.join("icons")
     }
 
+    /// Installed browser web apps, freshly read from the Start menu / `.desktop` entries.
+    pub fn scan_web_apps(&self) -> Vec<launcher_core::env::PwaShortcut> {
+        let found: Vec<_> = launcher_platform::installed_web_apps()
+            .into_iter()
+            .filter_map(|(name, launcher, args, icon)| launcher_core::env::PwaShortcut::from_args(&name, launcher, &args, icon))
+            .collect();
+        *self.web_apps.lock() = found.clone();
+        found
+    }
+
     /// Detects apps and adopts existing profiles, then saves and broadcasts.
     pub fn sync_catalog(&self) {
+        let mut env = self.env.clone();
+        env.pwas = self.scan_web_apps();
         {
             let mut store = self.store.lock();
-            let report = catalog::sync(&mut store.data, &self.registry, &self.env);
+            let report = catalog::sync(&mut store.data, &self.registry, &env);
             log::info!("catalog sync: {report:?}");
             if let Err(e) = store.save() {
                 log::error!("save: {e}");

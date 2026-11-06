@@ -63,6 +63,23 @@ pub fn remove_entry(file_stem: &str) {
     let _ = std::fs::remove_file(applications_dir().join(format!("{file_stem}.desktop")));
 }
 
+/// Chromium web-app entries (`Exec=… --app-id=…`) in the user's applications folder.
+pub fn web_app_entries() -> Vec<crate::WebAppShortcut> {
+    let Ok(rd) = std::fs::read_dir(applications_dir()) else { return Vec::new() };
+    rd.flatten()
+        .filter_map(|e| {
+            let text = std::fs::read_to_string(e.path()).ok()?;
+            let field = |k: &str| text.lines().find_map(|l| l.strip_prefix(k)).map(str::trim).map(str::to_string);
+            let exec = field("Exec=")?;
+            if !exec.contains("--app-id=") {
+                return None;
+            }
+            let (prog, args) = exec.split_once(' ').unwrap_or((&exec, ""));
+            Some((field("Name=")?, PathBuf::from(prog), args.to_string(), field("Icon=").map(PathBuf::from)))
+        })
+        .collect()
+}
+
 /// Uses `wmctrl` when installed (X11 / XWayland); on pure Wayland focusing another app's window
 /// is not permitted and this returns false.
 pub fn focus_any(pids: &[u32]) -> bool {

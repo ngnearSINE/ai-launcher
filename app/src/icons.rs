@@ -27,9 +27,19 @@ fn extract(_exe: &Path, _out: &Path) -> bool {
 
 /// `installation id → data URL`. Web apps have no executable icon and are drawn by the UI.
 pub fn app_icons(core: &Core) -> HashMap<String, String> {
+    // Installed web apps carry their own icon file; other apps use their executable's icon.
     let installs: Vec<(String, String, PathBuf)> = {
         let store = core.store.lock();
-        store.data.installations.iter().map(|i| (i.id.clone(), i.adapter.clone(), i.exe.clone())).collect()
+        store
+            .data
+            .installations
+            .iter()
+            .map(|i| {
+                let icon = i.options.get("icon").and_then(|v| v.as_str()).map(PathBuf::from);
+                let adapter = if icon.is_some() { "icon".to_string() } else { i.adapter.clone() };
+                (i.id.clone(), adapter, icon.unwrap_or_else(|| i.exe.clone()))
+            })
+            .collect()
     };
     // A running process gives the real executable behind a Store alias.
     let running_exe: HashMap<String, PathBuf> = {
@@ -45,6 +55,13 @@ pub fn app_icons(core: &Core) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for (id, adapter, exe) in installs {
         if adapter == "webapp" {
+            continue;
+        }
+        #[cfg(not(windows))]
+        if adapter == "icon" && exe.extension().map(|e| e == "png").unwrap_or(false) {
+            if let Some(url) = png_data_url(&exe) {
+                out.insert(id, url);
+            }
             continue;
         }
         let file = core.icons_dir().join(format!("app-{}.png", id.replace([':', '/', '\\'], "_")));

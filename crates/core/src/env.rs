@@ -16,6 +16,35 @@ pub struct Env {
     pub path: Vec<PathBuf>,
     /// Where the launcher keeps profiles it creates for apps without their own convention.
     pub launcher_data: PathBuf,
+    /// Installed browser web apps (PWAs) found by the platform layer (Start menu / .desktop).
+    pub pwas: Vec<PwaShortcut>,
+}
+
+/// One installed Chromium web app, as its shortcut starts it.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PwaShortcut {
+    pub name: String,
+    /// `chrome_proxy.exe` (Windows) or the browser binary (Linux).
+    pub launcher: PathBuf,
+    pub profile_directory: String,
+    pub app_id: String,
+    pub icon: Option<PathBuf>,
+}
+
+impl PwaShortcut {
+    /// Parses `--profile-directory=… --app-id=…` from a shortcut's arguments.
+    pub fn from_args(name: &str, launcher: PathBuf, args: &str, icon: Option<PathBuf>) -> Option<Self> {
+        let mut profile = String::from("Default");
+        let mut app_id = None;
+        for tok in split_command_line(args) {
+            if let Some(v) = tok.strip_prefix("--profile-directory=") {
+                profile = v.to_string();
+            } else if let Some(v) = tok.strip_prefix("--app-id=") {
+                app_id = Some(v.to_string());
+            }
+        }
+        Some(Self { name: name.to_string(), launcher, profile_directory: profile, app_id: app_id?, icon })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +84,7 @@ impl Env {
         // - the installer's program folder (%LOCALAPPDATA%\AI Launcher) must not hold sign-ins
         //   that would go away with an uninstall.
         let launcher_data = home.join(".ai-launcher");
-        Self { os, home, config, local, program_files, path, launcher_data }
+        Self { os, home, config, local, program_files, path, launcher_data, pwas: Vec::new() }
     }
 
     pub fn exe(&self, name: &str) -> String {
@@ -122,6 +151,29 @@ pub fn normalize_path(p: &Path, os: Os) -> String {
     s
 }
 
+/// Splits a command line on spaces outside double quotes and drops the quotes
+/// (`--a="b c" d` → `--a=b c`, `d`).
+pub fn split_command_line(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quoted = false;
+    for c in s.chars() {
+        match c {
+            '"' => quoted = !quoted,
+            ' ' | '\t' if !quoted => {
+                if !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+            }
+            _ => cur.push(c),
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
 /// `path` relative to `base`, comparing components case-insensitively (Windows paths).
 pub fn strip_prefix_ci(path: &Path, base: &Path) -> Option<PathBuf> {
     let mut p = path.components();
@@ -139,6 +191,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parses_pwa_shortcut_args() {
+        let p = PwaShortcut::from_args("Gemini", PathBuf::from("chrome_proxy.exe"), r#" --profile-directory="Profile 1" --app-id=kidhffoijkgamgmpojncofndlmpihnoc"#, None).unwrap();
+        assert_eq!(p.profile_directory, "Profile 1");
+        assert_eq!(p.app_id, "kidhffoijkgamgmpojncofndlmpihnoc");
+        let q = PwaShortcut::from_args("X", PathBuf::new(), "--profile-directory=Default --app-id=abc", None).unwrap();
+        assert_eq!((q.profile_directory.as_str(), q.app_id.as_str()), ("Default", "abc"));
+        assert!(PwaShortcut::from_args("Y", PathBuf::new(), "--profile-directory=Default", None).is_none());
+    }
+
+    #[test]
     #[cfg(windows)]
     fn maps_msix_virtual_paths() {
         let e = Env {
@@ -149,6 +211,7 @@ mod tests {
             program_files: vec![],
             path: vec![],
             launcher_data: PathBuf::from(r"C:\Users\A\.ai-launcher"),
+            pwas: vec![],
         };
         assert_eq!(
             e.msix_virtual(Path::new(r"c:\users\a\appdata\roaming\Claude-Work"), "Claude_x"),

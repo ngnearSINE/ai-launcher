@@ -45,6 +45,20 @@
   </div>
 
   {#if tab === 'web'}
+    {#if ui.snap?.availableWebApps.length}
+      <div class="sec">{t('설치된 웹앱')}</div>
+      <p class="muted small">{t('브라우저에 설치해 둔 웹앱을 지금 쓰는 로그인 그대로 추가해요. 다른 계정은 추가한 뒤 「새 인스턴스」로 만들 수 있어요.')}</p>
+      <div class="presets">
+        {#each ui.snap.availableWebApps as w (w.appId)}
+          <button class="preset" onclick={async () => { if (await run(api.addInstalledWebApp(w.appId), t('추가했어요'))) close() }}>
+            <span class="dot" style:background="var(--accent)"></span>
+            <span class="nm truncate">{w.name}</span>
+            <span class="url faint truncate">{w.profile}</span>
+          </button>
+        {/each}
+      </div>
+      <div class="sec">{t('새 웹앱 창')}</div>
+    {/if}
     {#if !browsers.length}
       <p class="muted">{t('Chrome·Edge 같은 Chromium 브라우저가 있어야 웹앱을 따로 띄울 수 있어요.')}</p>
     {:else}
@@ -90,6 +104,12 @@
 <style>
   .tabs {
     margin-bottom: 14px;
+  }
+  .sec {
+    font-size: var(--fs-12);
+    font-weight: 600;
+    color: var(--text-2);
+    margin: 4px 0 6px;
   }
   .small {
     font-size: var(--fs-12);

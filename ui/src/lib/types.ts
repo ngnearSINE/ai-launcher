@@ -208,4 +208,5 @@ export interface Snapshot {
   presets: Preset[]
   configDir: string
   update: UpdateState
+  availableWebApps: { appId: string; name: string; profile: string }[]
 }

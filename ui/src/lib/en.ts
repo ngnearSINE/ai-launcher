@@ -292,4 +292,8 @@ export const en: Record<string, string> = {
   '인터넷에 연결할 수 없어요': 'Cannot reach the internet',
   '업데이트를 확인하지 못했어요': 'Could not check for updates',
   '아직 확인하지 않았어요': 'Not checked yet',
+  '설치된 웹앱': 'Installed web apps',
+  '브라우저에 설치해 둔 웹앱을 지금 쓰는 로그인 그대로 추가해요. 다른 계정은 추가한 뒤 「새 인스턴스」로 만들 수 있어요.':
+    'Adds a web app installed in your browser with its current sign-in. Create other accounts afterwards with "New instance".',
+  '새 웹앱 창': 'New web app window',
 }

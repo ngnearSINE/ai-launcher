@@ -40,6 +40,7 @@ export const api = {
   launchBestClaude: () => invoke<string>('launch_best_claude'),
   quitApp: () => invoke<void>('quit_app'),
   appIcons: () => invoke<Record<string, string>>('app_icons'),
+  addInstalledWebApp: (appId: string) => invoke<string>('add_installed_web_app', { appId }),
   checkUpdate: () => invoke<void>('check_update'),
   installUpdate: () => invoke<boolean>('install_update'),
 }

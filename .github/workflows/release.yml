@@ -51,12 +51,20 @@ jobs:
       - id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # The id comes from the create response: listing releases right after creating a draft
+        # can miss it, and without an id tauri-action silently skips every upload.
         run: |
           tag="${{ steps.tag.outputs.tag }}"
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "AI Launcher $tag" --notes-file notes.md --draft
+          repo="${{ github.repository }}"
+          id=$(gh api "repos/$repo/releases?per_page=100" --jq ".[] | select(.tag_name==\"$tag\") | .id" | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$repo/releases/$id" -F body=@notes.md >/dev/null
+          else
+            id=$(gh api -X POST "repos/$repo/releases" -f tag_name="$tag" -f name="AI Launcher $tag" -F draft=true -F body=@notes.md --jq .id)
           fi
-          echo "id=$(gh api repos/${{ github.repository }}/releases --jq ".[] | select(.tag_name==\"$tag\") | .id" | head -1)" >> "$GITHUB_OUTPUT"
+          [ -n "$id" ] || { echo "::error::no release id for $tag"; exit 1; }
+          echo "release id $id"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
 
   build:
     needs: create-release
@@ -114,4 +122,11 @@ jobs:
       - name: Publish the draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ needs.create-release.outputs.tag }}" -R ${{ github.repository }} --draft=false --latest
+        run: |
+          id="${{ needs.create-release.outputs.release_id }}"
+          names=$(gh api "repos/${{ github.repository }}/releases/$id" --jq '.assets[].name')
+          echo "$names"
+          for want in 'latest.json' '-setup.exe' '.AppImage' '.deb'; do
+            echo "$names" | grep -Fq -- "$want" || { echo "::error::missing $want, not publishing"; exit 1; }
+          done
+          gh api -X PATCH "repos/${{ github.repository }}/releases/$id" -F draft=false -f make_latest=true >/dev/null

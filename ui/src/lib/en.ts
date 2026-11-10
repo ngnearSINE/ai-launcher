@@ -321,6 +321,11 @@ export const en: Record<string, string> = {
   '높을수록 배경 효과가 더 비쳐요': 'higher shows more of the backdrop',
   '런처 창 제목줄의 플로팅 단추나 단축키로 언제든 전환해요. 플로팅에서는 위쪽 ↗ 단추나 빈 곳 더블클릭으로 런처 창에 돌아와요.':
     'Switch any time with the floating button in the launcher title bar or the hotkey. From the floating launcher, use the ↗ button or double-click empty space to come back.',
+  '런처 창을 최소화하거나 단축키를 누르면 플로팅으로 전환해요. 플로팅에서는 위쪽 ↗ 단추나 빈 곳 더블클릭으로 런처 창에 돌아와요.':
+    'Minimising the launcher window or pressing the hotkey switches to the floating launcher. From the floating launcher, use the ↗ button or double-click empty space to come back.',
+  '최소화하면 플로팅으로 전환': 'Minimise to floating launcher',
+  '끄면 보통 최소화가 되고, 제목줄에 플로팅 전환 단추가 생겨요': 'When off, minimise works as usual and the title bar gets a floating-launcher button',
+  '최소화해서 플로팅으로 전환': 'Minimise to floating launcher',
   '런처 창 ⇄ 플로팅 전환 단축키': 'Launcher ⇄ floating hotkey',
   '전환할 때': 'When switching',
   '「한쪽만 보이기」는 한쪽을 열면 다른 쪽을 숨겨요': '"Swap" hides one when the other opens',

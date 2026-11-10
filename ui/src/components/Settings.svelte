@@ -173,8 +173,15 @@
       <h2>{t('플로팅 런처')}</h2>
       <div class="tip">
         <Icon name="float" size={14} />
-        <span>{t('런처 창 제목줄의 플로팅 단추나 단축키로 언제든 전환해요. 플로팅에서는 위쪽 ↗ 단추나 빈 곳 더블클릭으로 런처 창에 돌아와요.')}</span>
+        <span
+          >{s.minimizeToFloat
+            ? t('런처 창을 최소화하거나 단축키를 누르면 플로팅으로 전환해요. 플로팅에서는 위쪽 ↗ 단추나 빈 곳 더블클릭으로 런처 창에 돌아와요.')
+            : t('런처 창 제목줄의 플로팅 단추나 단축키로 언제든 전환해요. 플로팅에서는 위쪽 ↗ 단추나 빈 곳 더블클릭으로 런처 창에 돌아와요.')}</span
+        >
       </div>
+      <Row label={t('최소화하면 플로팅으로 전환')} desc={t('끄면 보통 최소화가 되고, 제목줄에 플로팅 전환 단추가 생겨요')}>
+        <Switch checked={s.minimizeToFloat} onchange={(v) => set('minimizeToFloat', v)} />
+      </Row>
       <Row label={t('플로팅 런처 표시')} desc={t('화면 가장자리에 떠 있는 작은 아이콘 줄')}>
         <Switch checked={s.floatEnabled} onchange={(v) => set('floatEnabled', v)} />
       </Row>

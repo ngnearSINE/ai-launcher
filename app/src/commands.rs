@@ -72,6 +72,7 @@ async fn fit_float(app: AppHandle, width: f64, height: f64) -> Res<()> {
 /// `to`: `float` or `main`. Async: it may create the floating window.
 #[tauri::command]
 async fn switch_view(app: AppHandle, core: State<'_, Arc<Core>>, to: String) -> Res<()> {
+    log::info!("switch view requested by the UI");
     crate::windows::switch_view(&app, core.inner(), to == "float");
     Ok(())
 }

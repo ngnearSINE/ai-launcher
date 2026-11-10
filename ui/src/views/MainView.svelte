@@ -30,7 +30,8 @@
   })
   const shown = $derived(sorter.arrange(list, (i) => i.id))
   const flipMs = $derived(snap.settings.reduceMotion ? 0 : 220)
-  const runningCount = $derived(snap.instances.filter((i) => i.running).length)
+  const floatKey = $derived(snap.settings.floatHotkeyEnabled ? ` (${snap.settings.floatHotkey})` : '')
+  const runningCount =$derived(snap.instances.filter((i) => i.running).length)
   // A few state filters as chips; apps go in one dropdown instead of a chip each.
   const filters = $derived([
     { id: 'all', label: t('전체'), count: snap.instances.length },
@@ -97,15 +98,24 @@
     </label>
     <div class="right" data-tauri-drag-region>
       <button class="btn primary sm" onclick={() => newInstance()} title="Ctrl+N"><Icon name="plus" size={14} /> {t('새 인스턴스')}</button>
-      <button
-        class="icon-btn"
-        title={t('플로팅 런처로 전환') + (snap.settings.floatHotkeyEnabled ? ` (${snap.settings.floatHotkey})` : '')}
-        aria-label={t('플로팅 런처로 전환')}
-        onclick={() => run(api.switchView('float'))}><Icon name="float" size={17} /></button
-      >
+      {#if !snap.settings.minimizeToFloat}
+        <button
+          class="icon-btn"
+          title={t('플로팅 런처로 전환') + floatKey}
+          aria-label={t('플로팅 런처로 전환')}
+          onclick={() => run(api.switchView('float'))}><Icon name="float" size={17} /></button
+        >
+      {/if}
       <button class="icon-btn" class:active={ui.view === 'settings'} title={t('설정') + ' (Ctrl+,)'} onclick={() => (ui.view = ui.view === 'settings' ? 'home' : 'settings')}><Icon name="settings" size={17} /></button>
       <div class="winctl">
-        <button aria-label={t('최소화')} onclick={() => win.minimize()}><Icon name="minus" size={14} /></button>
+        {#if snap.settings.minimizeToFloat}
+          <!-- Straight to the floating launcher, without the OS minimise animation first. -->
+          <button aria-label={t('최소화해서 플로팅으로 전환')} title={t('최소화해서 플로팅으로 전환') + floatKey} onclick={() => run(api.switchView('float'))}
+            ><Icon name="minus" size={14} /></button
+          >
+        {:else}
+          <button aria-label={t('최소화')} onclick={() => win.minimize()}><Icon name="minus" size={14} /></button>
+        {/if}
         <button aria-label={t('최대화')} onclick={() => win.toggleMaximize()}><Icon name="square" size={12} /></button>
         <button class="close" aria-label={t('닫기')} onclick={() => win.close()}><Icon name="x" size={15} /></button>
       </div>

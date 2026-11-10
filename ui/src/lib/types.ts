@@ -35,6 +35,7 @@ export interface Settings {
   floatSize: number
   floatPosition: [number, number] | null
   floatSwitch: 'swap' | 'both'
+  minimizeToFloat: boolean
   floatHotkey: string
   floatHotkeyEnabled: boolean
   taskbarSeparate: boolean

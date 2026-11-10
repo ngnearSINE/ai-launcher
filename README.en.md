@@ -7,7 +7,7 @@ Run several accounts of Claude Desktop and other AI apps side by side, on Window
 - **Usage cards** — Claude 5-hour, weekly, per-model (e.g. Fable) and credit usage, read **only from that instance's own sign-in**.
 - **Auto-detect + add by path** — Claude, Orca, Cursor, Poe and Grok Bot in their default locations, plus AI web apps installed from Chrome, are registered automatically; anything else can be added by path.
 - **Web apps** — web apps you installed from Chrome (Gemini, Grok…) open as the default instance with your usual profile; other accounts get app windows with their own browser data folder. Chrome and Edge themselves are not shown as cards.
-- **Quick launch, tray and floating launcher** — global hotkey (`Alt+Shift+Space`) → type → Enter; launch from the tray menu; or switch to an always-on-top icon strip with usage rings (title-bar button or `Alt+Shift+F`).
+- **Quick launch, tray and floating launcher** — global hotkey (`Alt+Shift+Space`) → type → Enter; launch from the tray menu; or switch to an always-on-top icon strip with usage rings (minimise the launcher window — or the title-bar button if you turn that off — or `Alt+Shift+F`).
 
 ## Supported apps
 

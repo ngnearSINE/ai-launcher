@@ -68,6 +68,9 @@ pub struct Settings {
     pub float_position: Option<(i32, i32)>,
     /// Main window ⇄ floating launcher: `swap` hides one when showing the other, `both` keeps both.
     pub float_switch: String,
+    /// Minimising the main window switches to the floating launcher (and the title bar drops
+    /// its separate floating button).
+    pub minimize_to_float: bool,
     pub float_hotkey: String,
     pub float_hotkey_enabled: bool,
 
@@ -142,6 +145,7 @@ impl Default for Settings {
             float_size: 44,
             float_position: None,
             float_switch: "swap".into(),
+            minimize_to_float: true,
             float_hotkey: "Alt+Shift+F".into(),
             float_hotkey_enabled: true,
 

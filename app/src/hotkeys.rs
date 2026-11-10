@@ -19,6 +19,7 @@ pub fn plugin() -> TauriPlugin<Wry> {
             if s.quick_hotkey_enabled && parse(&s.quick_hotkey).as_ref() == Some(shortcut) {
                 crate::windows::toggle_quick(app, None);
             } else if s.float_hotkey_enabled && parse(&s.float_hotkey).as_ref() == Some(shortcut) {
+                log::info!("float hotkey");
                 crate::windows::toggle_view(app, core.inner());
             } else if s.best_claude_hotkey_enabled && parse(&s.best_claude_hotkey).as_ref() == Some(shortcut) {
                 if let Err(e) = core.launch_best_claude() {

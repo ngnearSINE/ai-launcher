@@ -27,6 +27,7 @@ impl Tristate {
 pub struct Settings {
     // Appearance
     pub language: String,
+    /// `system`, `light`, `dark`, or a dark variant: `claude`, `midnight`, `black`.
     pub theme: String,
     pub accent: String,
     pub glass: bool,
@@ -38,7 +39,17 @@ pub struct Settings {
     pub density: String,
     pub card_usage_style: String,
     pub sort: String,
+    /// Old card-grid grouping; kept so older files still load. The sidebar uses `sidebar_group`.
     pub group_by: String,
+    /// Sidebar sections: `status` (needs attention → running low → running → idle), `app`,
+    /// `group` or `none`.
+    pub sidebar_group: String,
+    /// Second line under each sidebar row with the signed-in account.
+    pub sidebar_show_account: bool,
+    /// Least-left percentage at the end of each sidebar row.
+    pub sidebar_show_usage: bool,
+    /// In-window shortcut overrides by binding id (`""` = unassigned). Defaults live in the UI.
+    pub keymap: std::collections::BTreeMap<String, String>,
 
     // Launcher behaviour
     pub start_with_os: bool,
@@ -122,6 +133,10 @@ impl Default for Settings {
             card_usage_style: "bars".into(),
             sort: "manual".into(),
             group_by: "none".into(),
+            sidebar_group: "status".into(),
+            sidebar_show_account: false,
+            sidebar_show_usage: true,
+            keymap: Default::default(),
 
             start_with_os: false,
             start_hidden: true,
@@ -186,6 +201,12 @@ impl Settings {
         self.usage_warn_percent = self.usage_warn_percent.min(100);
         self.usage_crit_percent = self.usage_crit_percent.clamp(self.usage_warn_percent, 100);
         self.update_hour = self.update_hour.min(23);
+        if !["system", "light", "dark", "claude", "midnight", "black"].contains(&self.theme.as_str()) {
+            self.theme = Settings::default().theme;
+        }
+        if !["status", "app", "group", "none"].contains(&self.sidebar_group.as_str()) {
+            self.sidebar_group = Settings::default().sidebar_group;
+        }
         if !self.accent.starts_with('#') || self.accent.len() != 7 {
             self.accent = Settings::default().accent;
         }

@@ -8,7 +8,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Webview
 
 use crate::core::Core;
 
-const QUICK_W: f64 = 380.0;
+const QUICK_W: f64 = 440.0;
 const QUICK_H: f64 = 560.0;
 
 pub fn show_main(app: &AppHandle) {

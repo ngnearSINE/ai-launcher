@@ -1,118 +1,141 @@
 <script lang="ts">
+  // Main window shell: title bar, instance sidebar, and one content pane (overview, an
+  // instance, or settings). Every keyboard shortcut is resolved here through lib/keymap.
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { onMount } from 'svelte'
-  import { flip } from 'svelte/animate'
   import { api } from '../lib/api'
-  import { deleteInstance, edit, launch, listenUiActions, newInstance } from '../lib/actions'
+  import { deleteInstance, edit, listenUiActions, newInstance, primary, quitInstance, toggleFavorite, undoDelete } from '../lib/actions'
+  import { cycleTheme, toggleRail } from '../lib/commands.svelte'
   import { t } from '../lib/i18n.svelte'
-  import { dialogs, installationOf, run, ui, visibleInstances } from '../lib/state.svelte'
-  import { createSortable, mergeOrder } from '../lib/sortable.svelte'
-  import { cardSpan } from '../lib/usage'
+  import { matches, typing } from '../lib/keymap.svelte'
+  import { sidebarOrder } from '../lib/sidebar.svelte'
+  import { dialogs, instanceById, run, ui } from '../lib/state.svelte'
+  import AddAppDialog from '../components/AddAppDialog.svelte'
+  import CommandPalette from '../components/CommandPalette.svelte'
   import Icon from '../components/Icon.svelte'
-  import InstanceCard from '../components/InstanceCard.svelte'
   import InstanceDrawer from '../components/InstanceDrawer.svelte'
   import NewInstanceDialog from '../components/NewInstanceDialog.svelte'
-  import AddAppDialog from '../components/AddAppDialog.svelte'
   import Settings from '../components/Settings.svelte'
+  import ShortcutHelp from '../components/ShortcutHelp.svelte'
+  import Sidebar from '../components/Sidebar.svelte'
+  import InstanceDetail from './InstanceDetail.svelte'
+  import Overview from './Overview.svelte'
 
   const win = getCurrentWindow()
-  let searchEl = $state<HTMLInputElement | null>(null)
-  let contentEl = $state<HTMLElement | null>(null)
-
   const snap = $derived(ui.snap!)
-  const list = $derived(visibleInstances())
-  // Drag to reorder (manual sort only): ghost + placeholder + sliding cards.
-  const sorter = createSortable({
-    ids: () => list.map((i) => i.id),
-    commit: (ids) => run(api.reorder(mergeOrder(snap.instances.map((i) => i.id), ids))),
-    enabled: () => snap.settings.sort === 'manual',
-    scroller: () => contentEl,
-  })
-  const shown = $derived(sorter.arrange(list, (i) => i.id))
-  const flipMs = $derived(snap.settings.reduceMotion ? 0 : 220)
+  const selected = $derived(instanceById(ui.selected))
+  const rail = $derived(ui.railPinned || ui.narrow)
   const floatKey = $derived(snap.settings.floatHotkeyEnabled ? ` (${snap.settings.floatHotkey})` : '')
-  const runningCount =$derived(snap.instances.filter((i) => i.running).length)
-  // A few state filters as chips; apps go in one dropdown instead of a chip each.
-  const filters = $derived([
-    { id: 'all', label: t('전체'), count: snap.instances.length },
-    { id: 'running', label: t('실행 중'), count: runningCount },
-    ...(snap.instances.some((i) => i.favorite) ? [{ id: 'favorite', label: t('즐겨찾기'), count: snap.instances.filter((i) => i.favorite).length }] : []),
-    ...snap.groups.map((g) => ({ id: `group:${g.id}`, label: g.name, count: snap.instances.filter((i) => i.groupId === g.id).length })),
-  ])
-  const apps = $derived(snap.installations.filter((a) => !a.hidden && snap.instances.some((i) => i.installationId === a.id)))
 
+  function measure() {
+    ui.narrow = innerWidth < 840
+  }
   onMount(() => {
+    measure()
     const un = listenUiActions()
     return () => {
       un.then((f) => f())
     }
   })
 
-  function setLayout(l: 'grid' | 'list') {
-    ui.layout = l
-    localStorage.setItem('layout', l)
+  // Hold Ctrl (or Alt) a moment to see which number launches which row.
+  let holdTimer: ReturnType<typeof setTimeout> | undefined
+  function stopHold() {
+    clearTimeout(holdTimer)
+    ui.numbers = false
   }
 
-  function typing(e: KeyboardEvent) {
-    const el = e.target as HTMLElement
-    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable
+  function step(d: number) {
+    const order = sidebarOrder()
+    if (!order.length) return
+    const i = order.findIndex((x) => x.id === ui.selected)
+    const next = order[i < 0 ? (d > 0 ? 0 : order.length - 1) : (i + d + order.length) % order.length]
+    ui.view = 'home'
+    ui.selected = next.id
+    queueMicrotask(() => document.querySelector(`[data-sort-id="${next.id}"]`)?.scrollIntoView({ block: 'nearest' }))
   }
+
   function key(e: KeyboardEvent) {
-    if (document.querySelector('.scrim')) return
-    const mod = e.ctrlKey || e.metaKey
-    if (mod && e.key.toLowerCase() === 'n') {
-      e.preventDefault()
-      newInstance()
-    } else if ((mod && e.key.toLowerCase() === 'f') || (e.key === '/' && !typing(e))) {
-      e.preventDefault()
-      ui.view = 'home'
-      searchEl?.focus()
-    } else if (mod && e.key === ',') {
-      e.preventDefault()
-      ui.view = ui.view === 'settings' ? 'home' : 'settings'
-    } else if (!typing(e) && !mod && /^[1-9]$/.test(e.key) && ui.view === 'home') {
-      const inst = list[Number(e.key) - 1]
-      if (inst) launch(inst)
-    } else if (!typing(e) && (e.key === 'Delete' || e.key === 'F2')) {
-      const id = (document.activeElement as HTMLElement | null)?.closest('[data-index]')?.getAttribute('data-index')
-      const inst = id ? list[Number(id)] : undefined
-      if (inst) e.key === 'Delete' ? deleteInstance(inst) : edit(inst)
-    } else if (e.key === 'Escape' && ui.search && document.activeElement === searchEl) {
-      ui.search = ''
+    if ((e.key === 'Control' || e.key === 'Alt') && !e.repeat) {
+      clearTimeout(holdTimer)
+      holdTimer = setTimeout(() => (ui.numbers = true), 150)
+      return
     }
+    if (e.key !== 'Control' && e.key !== 'Alt') clearTimeout(holdTimer)
+    // Dialogs and the palette handle their own keys.
+    if (document.querySelector('.scrim') || ui.palette) return
+    const editing = typing(e)
+    const act = (id: string) => matches(e, id)
+    const sel = selected
+    const run1 = (f: () => unknown) => {
+      e.preventDefault()
+      f()
+    }
+
+    if (act('palette')) return run1(() => (ui.palette = true))
+    if (/^Digit[1-9]$/.test(e.code) && e.ctrlKey && !e.altKey && !e.shiftKey) {
+      const inst = sidebarOrder()[Number(e.code.slice(5)) - 1]
+      if (inst) run1(() => primary(inst))
+      return
+    }
+    if (act('newInstance')) return run1(() => newInstance())
+    if (act('settings')) return run1(() => (ui.view = ui.view === 'settings' ? 'home' : 'settings'))
+    if (act('sidebar')) return run1(toggleRail)
+    if (act('theme')) return run1(cycleTheme)
+    if (act('overview')) return run1(() => ((ui.view = 'home'), (ui.selected = null)))
+    if (act('next')) return run1(() => step(1))
+    if (act('prev')) return run1(() => step(-1))
+    if (act('pin') && sel) return run1(() => toggleFavorite(sel))
+    if (editing) return
+    if (act('help')) return run1(() => (ui.help = true))
+    if (act('undo')) {
+      if (undoDelete()) e.preventDefault()
+      return
+    }
+    if (e.key === 'Escape') {
+      if (ui.view === 'settings') return run1(() => (ui.view = 'home'))
+      if (ui.selected && !ui.drawer) return run1(() => (ui.selected = null))
+      return
+    }
+    if (ui.view !== 'home') return
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.altKey && !e.ctrlKey) return run1(() => step(e.key === 'ArrowDown' ? 1 : -1))
+    if (!sel) return
+    // Enter on a focused button belongs to the button.
+    if (act('launch') && !(e.target as HTMLElement).closest('button')) return run1(() => primary(sel))
+    if (act('edit')) return run1(() => edit(sel))
+    if (act('delete')) return run1(() => deleteInstance(sel))
+    if (act('restart') && sel.running) return run1(() => run(api.restart(sel.id)))
+    if (act('quit') && sel.running) return run1(() => quitInstance(sel))
   }
 </script>
 
-<svelte:window onkeydown={key} />
+<svelte:window onkeydown={key} onkeyup={stopHold} onblur={stopHold} onresize={measure} />
 
 <div class="shell">
   <header class="titlebar" data-tauri-drag-region>
-    <div class="brand" data-tauri-drag-region>
-      <img src="/icon.png" alt="" />
-      <span>{t('AI 런처')}</span>
-    </div>
-    <label class="search">
-      <Icon name="search" size={14} />
-      <input bind:this={searchEl} bind:value={ui.search} placeholder={t('인스턴스 검색')} onfocus={() => (ui.view = 'home')} />
-      {#if !ui.search}<span class="kbd">/</span>{/if}
-    </label>
-    <div class="right" data-tauri-drag-region>
-      <button class="btn primary sm" onclick={() => newInstance()} title="Ctrl+N"><Icon name="plus" size={14} /> {t('새 인스턴스')}</button>
-      {#if !snap.settings.minimizeToFloat}
-        <button
-          class="icon-btn"
-          title={t('플로팅 런처로 전환') + floatKey}
-          aria-label={t('플로팅 런처로 전환')}
-          onclick={() => run(api.switchView('float'))}><Icon name="float" size={17} /></button
-        >
+    <div class="brand" data-tauri-drag-region style:width={ui.view === 'settings' ? 'auto' : rail ? '60px' : 'var(--sidebar-w)'}>
+      {#if ui.view !== 'settings'}
+        <button class="icon-btn sm" title={t('사이드바 접기·펴기') + ' (Ctrl+B)'} aria-label={t('사이드바 접기·펴기')} onclick={toggleRail} disabled={ui.narrow}>
+          <Icon name="sidebar" size={16} />
+        </button>
       {/if}
-      <button class="icon-btn" class:active={ui.view === 'settings'} title={t('설정') + ' (Ctrl+,)'} onclick={() => (ui.view = ui.view === 'settings' ? 'home' : 'settings')}><Icon name="settings" size={17} /></button>
+      {#if !rail || ui.view === 'settings'}<img src="/icon.png" alt="" /><span data-tauri-drag-region>{t('AI 런처')}</span>{/if}
+    </div>
+    <div class="mid" data-tauri-drag-region>
+      <button class="trigger" onclick={() => (ui.palette = true)} aria-label={t('명령 팔레트')}>
+        <Icon name="search" size={14} />
+        <span class="ph">{t('인스턴스나 명령 검색')}</span>
+        <span class="kbd">Ctrl</span><span class="kbd">K</span>
+      </button>
+    </div>
+    <div class="right" data-tauri-drag-region>
+      {#if !snap.settings.minimizeToFloat}
+        <button class="icon-btn" title={t('플로팅 런처로 전환') + floatKey} aria-label={t('플로팅 런처로 전환')} onclick={() => run(api.switchView('float'))}><Icon name="float" size={17} /></button>
+      {/if}
       <div class="winctl">
         {#if snap.settings.minimizeToFloat}
           <!-- Straight to the floating launcher, without the OS minimise animation first. -->
-          <button aria-label={t('최소화해서 플로팅으로 전환')} title={t('최소화해서 플로팅으로 전환') + floatKey} onclick={() => run(api.switchView('float'))}
-            ><Icon name="minus" size={14} /></button
-          >
+          <button aria-label={t('최소화해서 플로팅으로 전환')} title={t('최소화해서 플로팅으로 전환') + floatKey} onclick={() => run(api.switchView('float'))}><Icon name="minus" size={14} /></button>
         {:else}
           <button aria-label={t('최소화')} onclick={() => win.minimize()}><Icon name="minus" size={14} /></button>
         {/if}
@@ -122,73 +145,27 @@
     </div>
   </header>
 
-  {#if ui.view === 'settings'}
-    <main class="settings-wrap"><Settings /></main>
-  {:else}
-    <div class="toolbar">
-      <div class="chips">
-        {#each filters as f (f.id)}
-          <button class="chip" class:on={ui.filter === f.id} onclick={() => (ui.filter = f.id)}>
-            {f.label} <span class="n num">{f.count}</span>
-          </button>
-        {/each}
-      </div>
-      <div class="views">
-        {#if apps.length > 1}
-          <select
-            class="select app-filter"
-            value={ui.filter.startsWith('app:') ? ui.filter : ''}
-            onchange={(e) => (ui.filter = (e.target as HTMLSelectElement).value || 'all')}
-            aria-label={t('앱')}
-          >
-            <option value="">{t('모든 앱')}</option>
-            {#each apps as a (a.id)}<option value="app:{a.id}">{a.name}</option>{/each}
-          </select>
+  <div class="body">
+    {#if ui.view === 'settings'}
+      <main class="pane settings-wrap"><Settings /></main>
+    {:else}
+      <Sidebar {rail} />
+      <main class="pane">
+        {#if selected}
+          {#key selected.id}<InstanceDetail inst={selected} />{/key}
+        {:else}
+          <Overview />
         {/if}
-        <button class="icon-btn sm" class:active={ui.layout === 'grid'} aria-label={t('카드')} onclick={() => setLayout('grid')}><Icon name="grid" size={15} /></button>
-        <button class="icon-btn sm" class:active={ui.layout === 'list'} aria-label={t('목록')} onclick={() => setLayout('list')}><Icon name="list" size={15} /></button>
-      </div>
-    </div>
-
-    <main class="content" bind:this={contentEl}>
-      {#if !snap.instances.length}
-        <div class="empty">
-          <img src="/icon.png" alt="" />
-          <h2>{t('아직 인스턴스가 없어요')}</h2>
-          <p class="muted">{t('설치된 앱을 찾지 못했어요. 앱을 추가하거나 다시 찾아보세요.')}</p>
-          <div class="row">
-            <button class="btn primary" onclick={() => (dialogs.addApp = true)}>{t('앱 추가')}</button>
-            <button class="btn" onclick={() => run(api.rescan())}>{t('다시 찾기')}</button>
-          </div>
-        </div>
-      {:else if !list.length}
-        <div class="empty small">
-          <p class="muted">{t('조건에 맞는 인스턴스가 없어요')}</p>
-        </div>
-      {:else}
-        <div class="cards" class:list={ui.layout === 'list'} role="list">
-          {#each shown as inst, i (inst.id)}
-            <div
-              class="slot"
-              role="listitem"
-              class:sort-placeholder={sorter.st.dragging === inst.id}
-              data-sort-id={inst.id}
-              style:grid-row="span {ui.layout === 'list' ? 1 : cardSpan(inst, !!installationOf(inst)?.hasUsage)}"
-              animate:flip={{ duration: flipMs }}
-              onpointerdown={(e) => sorter.down(e, inst.id)}
-            >
-              <InstanceCard {inst} index={i} list={ui.layout === 'list'} />
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </main>
-  {/if}
+      </main>
+    {/if}
+  </div>
 </div>
 
 <InstanceDrawer />
 {#if dialogs.newInstance}<NewInstanceDialog />{/if}
 {#if dialogs.addApp}<AddAppDialog />{/if}
+{#if ui.palette}<CommandPalette onclose={() => (ui.palette = false)} />{/if}
+{#if ui.help}<ShortcutHelp />{/if}
 
 <style>
   .shell {
@@ -198,66 +175,66 @@
     background: var(--bg);
   }
   .titlebar {
-    height: 48px;
+    height: 40px;
     flex: none;
-    display: grid;
-    grid-template-columns: 1fr minmax(200px, 360px) 1fr;
+    display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 0 0 14px;
   }
   .brand {
+    flex: none;
     display: flex;
     align-items: center;
     gap: 8px;
+    padding: 0 8px 0 10px;
     font-weight: 650;
     font-size: var(--fs-13);
     letter-spacing: -0.01em;
+    transition: width var(--dur) var(--ease);
   }
   .brand img {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     pointer-events: none;
   }
-  .search {
+  .mid {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+    padding: 0 12px;
+  }
+  .trigger {
+    width: min(420px, 100%);
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 30px;
-    padding: 0 8px 0 10px;
-    border-radius: 9px;
-    background: var(--well);
-    border: 1px solid transparent;
+    height: 28px;
+    padding: 0 6px 0 10px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--s0) 55%, transparent);
     color: var(--text-3);
-    transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+    font-size: var(--fs-12);
   }
-  .search:focus-within {
-    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-    background: var(--surface-solid);
+  .trigger:hover {
+    border-color: var(--line-strong);
+    color: var(--text-2);
   }
-  .search input {
+  .ph {
     flex: 1;
-    border: 0;
-    outline: 0;
-    background: none;
-    min-width: 0;
-    color: var(--text);
+    text-align: left;
   }
   .right {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: 4px;
     height: 100%;
-  }
-  .icon-btn.active {
-    color: var(--accent);
-    background: var(--accent-softer);
   }
   .winctl {
     display: flex;
     height: 100%;
-    margin-left: 6px;
+    margin-left: 4px;
   }
   .winctl button {
     width: 46px;
@@ -276,105 +253,24 @@
     background: #e81123;
     color: white;
   }
-  .toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 4px 20px 10px;
-  }
-  .chips {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 11px;
-    border-radius: var(--r-pill);
-    border: 1px solid var(--line);
-    background: transparent;
-    color: var(--text-2);
-    font-size: var(--fs-12);
-    white-space: nowrap;
-    transition: all var(--dur) var(--ease);
-  }
-  .chip:hover {
-    background: var(--surface-hover);
-    color: var(--text);
-  }
-  .chip.on {
-    background: var(--text);
-    border-color: var(--text);
-    color: var(--bg-solid);
-  }
-  .chip .n {
-    opacity: 0.6;
-    font-size: var(--fs-11);
-  }
-  .views {
-    display: flex;
-    gap: 2px;
-  }
-  .content {
+  .body {
     flex: 1;
-    overflow: auto;
-    padding: 4px 20px 24px;
-  }
-  /* Fixed row unit: short cards take one row, usage cards two or three, and `dense` lets
-     short cards fill the space beside tall ones, so the grid has no holes. */
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    grid-auto-rows: 104px;
-    grid-auto-flow: row dense;
-    gap: 12px;
-  }
-  .cards.list {
-    grid-template-columns: 1fr;
-    grid-auto-rows: auto;
-    grid-auto-flow: row;
-    gap: 8px;
-  }
-  .slot {
-    min-width: 0;
     min-height: 0;
-  }
-  .app-filter {
-    width: auto;
-    height: 28px;
-    font-size: var(--fs-12);
-    margin-right: 6px;
-  }
-  .empty {
-    height: 100%;
-    display: grid;
-    place-content: center;
-    justify-items: center;
-    text-align: center;
-    gap: 6px;
-  }
-  .empty img {
-    width: 72px;
-    height: 72px;
-    margin-bottom: 8px;
-  }
-  .empty h2 {
-    margin: 0;
-    font-size: var(--fs-17);
-  }
-  .empty .row {
     display: flex;
-    gap: 8px;
-    margin-top: 10px;
+  }
+  /* The content pane is one step up from the window backdrop, with a soft top-left corner. */
+  .pane {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    background: var(--layer);
+    border-top: 1px solid var(--line);
+    border-left: 1px solid var(--line);
+    border-top-left-radius: var(--r-lg);
   }
   .settings-wrap {
-    flex: 1;
-    min-height: 0;
-    border-top: 1px solid var(--line);
+    overflow: hidden;
+    border-left: 0;
+    border-top-left-radius: 0;
   }
 </style>

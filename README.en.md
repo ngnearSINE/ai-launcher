@@ -4,7 +4,9 @@ Run several accounts of Claude Desktop and other AI apps side by side, on Window
 
 - **One instance per account** — each instance has its own data folder, so sign-ins never mix.
 - **Pin each one separately** (Windows) — every instance gets its own taskbar button; a pinned button starts exactly that instance.
-- **Usage cards** — Claude 5-hour, weekly, per-model (e.g. Fable) and credit usage, read **only from that instance's own sign-in**.
+- **Sidebar and overview** — instances grouped by status (needs attention, running low, running, idle) with pinned ones on top; the overview shows the best Claude account to use now and usage per account; an instance's page shows its usage, memory and folder.
+- **Usage** — Claude 5-hour, weekly, per-model (e.g. Fable) and credit usage with time to reset, and a notification naming an account with room when one runs low. Read **only from that instance's own sign-in**.
+- **Command palette** — `Ctrl+K` finds any instance or command; the tray quick launch is the same list. Press `?` for every shortcut (remappable in Settings → Shortcuts).
 - **Auto-detect + add by path** — Claude, Orca, Cursor, Poe and Grok Bot in their default locations, plus AI web apps installed from Chrome, are registered automatically; anything else can be added by path.
 - **Web apps** — web apps you installed from Chrome (Gemini, Grok…) open as the default instance with your usual profile; other accounts get app windows with their own browser data folder. Chrome and Edge themselves are not shown as cards.
 - **Quick launch, tray and floating launcher** — global hotkey (`Alt+Shift+Space`) → type → Enter; launch from the tray menu; or switch to an always-on-top icon strip with usage rings (minimise the launcher window — or the title-bar button if you turn that off — or `Alt+Shift+F`).
@@ -22,7 +24,7 @@ Run several accounts of Claude Desktop and other AI apps side by side, on Window
 
 1. On first start the launcher finds installed apps and shows one default instance (your usual sign-in) per app.
 2. **New instance** → pick the app, a name and a colour. It starts in a fresh folder; sign in with another account.
-3. Start it, right-click its taskbar button → **Pin to taskbar**. A Start-menu shortcut made from the card menu shares the same button.
+3. Start it, right-click its taskbar button → **Pin to taskbar**. A Start-menu shortcut made from the instance menu (⋯ or right-click) shares the same button.
 
 Taskbar behaviour (separate or merged buttons, colour badges, how pinned buttons launch) lives in **Settings → Taskbar** and can be overridden per instance under **Edit → Advanced**.
 

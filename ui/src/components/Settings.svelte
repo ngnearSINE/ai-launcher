@@ -8,6 +8,8 @@
   import type { Settings as S } from '../lib/types'
   import Icon from './Icon.svelte'
   import { ColorPick, HotkeyInput, Row, Segmented, Switch } from './controls'
+  import ThemePicker from './ThemePicker.svelte'
+  import { BINDINGS, caps, keysOf, SECTIONS } from '../lib/keymap.svelte'
 
   const s = $derived(settings())
   const up = $derived(ui.snap!.update)
@@ -45,6 +47,7 @@
     { id: 'general', icon: 'sliders', label: t('일반') },
     { id: 'appearance', icon: 'palette', label: t('모양') },
     { id: 'launcher', icon: 'float', label: t('런처') },
+    { id: 'shortcuts', icon: 'keyboard', label: t('단축키') },
     { id: 'taskbar', icon: 'taskbar', label: t('작업 표시줄') },
     { id: 'usage', icon: 'chart', label: t('사용량') },
     { id: 'apps', icon: 'layers', label: t('앱 관리') },
@@ -110,20 +113,12 @@
       <Row label={t('강제 종료 전에 묻기')}>
         <Switch checked={s.confirmQuitInstance} onchange={(v) => set('confirmQuitInstance', v)} />
       </Row>
-      <Row label={t('정렬')}>
-        <select class="select w" value={s.sort} onchange={(e) => set('sort', (e.target as HTMLSelectElement).value as S['sort'])}>
-          <option value="manual">{t('직접 (끌어서 순서 바꾸기)')}</option>
-          <option value="name">{t('이름순')}</option>
-          <option value="recent">{t('최근 실행순')}</option>
-          <option value="headroom">{t('사용량 여유순')}</option>
-        </select>
-      </Row>
     {:else if ui.settingsTab === 'appearance'}
       <h1>{t('모양')}</h1>
-      <Row label={t('테마')}>
-        <Segmented value={s.theme} onchange={(v) => set('theme', v)} options={[{ value: 'system', label: t('시스템') }, { value: 'light', label: t('밝게') }, { value: 'dark', label: t('어둡게') }]} />
+      <Row label={t('테마')} desc={t('Ctrl+Alt+T로 차례로 바꿀 수 있어요')} stack>
+        <ThemePicker value={s.theme} accent={s.accent} onchange={(v) => set('theme', v)} />
       </Row>
-      <Row label={t('강조색')} stack>
+      <Row label={t('강조색')} desc={s.theme === 'claude' ? t('Claude 테마는 자기 강조색(주황)을 써요') : undefined} stack>
         <ColorPick value={s.accent} onchange={(c) => set('accent', c)} />
       </Row>
       <Row label={t('창 배경 효과')} desc={t('Windows가 창 뒤를 비춰 보이게 하는 소재예요. Mica Alt는 배경화면 색이 은은하게, 아크릴은 뒤의 창까지 흐리게 비쳐요.')}>
@@ -144,26 +139,15 @@
       <Row label={t('투명도')} desc={`${s.glassStrength}% · ${t('높을수록 배경 효과가 더 비쳐요')}`}>
         <input type="range" min="0" max="100" value={s.glassStrength} disabled={!s.glass} onchange={(e) => set('glassStrength', +(e.target as HTMLInputElement).value)} />
       </Row>
-      <Row label={t('카드 밀도')}>
+      <Row label={t('목록 밀도')} desc={t('사이드바 행 높이')}>
         <Segmented value={s.density} onchange={(v) => set('density', v)} options={[{ value: 'comfortable', label: t('여유') }, { value: 'compact', label: t('촘촘') }]} />
-      </Row>
-      <Row label={t('카드 사용량 표시')} desc={t('촘촘하게는 5시간·주간만')}>
-        <Segmented value={s.cardUsageStyle} onchange={(v) => set('cardUsageStyle', v)} options={[{ value: 'bars', label: t('전부') }, { value: 'compact', label: t('촘촘하게') }]} />
       </Row>
       <Row label={t('움직임 줄이기')}>
         <Switch checked={s.reduceMotion} onchange={(v) => set('reduceMotion', v)} />
       </Row>
     {:else if ui.settingsTab === 'launcher'}
       <h1>{t('런처')}</h1>
-      <h2>{t('빠른 실행')}</h2>
-      <Row label={t('빠른 실행 단축키')} desc={t('어디서든 눌러 검색하고 Enter로 실행')}>
-        <HotkeyInput value={s.quickHotkey} onchange={(v) => set('quickHotkey', v)} />
-        <Switch checked={s.quickHotkeyEnabled} onchange={(v) => set('quickHotkeyEnabled', v)} />
-      </Row>
-      <Row label={t('가장 여유 있는 Claude 실행')} desc={t('5시간·주간 사용량이 가장 낮은 Claude 인스턴스를 띄워요')}>
-        <HotkeyInput value={s.bestClaudeHotkey} onchange={(v) => set('bestClaudeHotkey', v)} />
-        <Switch checked={s.bestClaudeHotkeyEnabled} onchange={(v) => set('bestClaudeHotkeyEnabled', v)} />
-      </Row>
+      <h2>{t('트레이')}</h2>
       <Row label={t('트레이 아이콘 클릭')}>
         <Segmented value={s.trayLeftClick} onchange={(v) => set('trayLeftClick', v)} options={[{ value: 'popup', label: t('빠른 실행') }, { value: 'main', label: t('관리 창') }]} />
       </Row>
@@ -184,10 +168,6 @@
       </Row>
       <Row label={t('플로팅 런처 표시')} desc={t('화면 가장자리에 떠 있는 작은 아이콘 줄')}>
         <Switch checked={s.floatEnabled} onchange={(v) => set('floatEnabled', v)} />
-      </Row>
-      <Row label={t('런처 창 ⇄ 플로팅 전환 단축키')}>
-        <HotkeyInput value={s.floatHotkey} onchange={(v) => set('floatHotkey', v)} />
-        <Switch checked={s.floatHotkeyEnabled} onchange={(v) => set('floatHotkeyEnabled', v)} />
       </Row>
       <Row label={t('전환할 때')} desc={t('「한쪽만 보이기」는 한쪽을 열면 다른 쪽을 숨겨요')}>
         <Segmented value={s.floatSwitch} onchange={(v) => set('floatSwitch', v)} options={[{ value: 'swap', label: t('한쪽만 보이기') }, { value: 'both', label: t('둘 다 두기') }]} />
@@ -220,6 +200,41 @@
       <Row label={t('위치 초기화')}>
         <button class="btn sm" onclick={() => set('floatPosition', null)}>{t('초기화')}</button>
       </Row>
+    {:else if ui.settingsTab === 'shortcuts'}
+      <h1>{t('단축키')}</h1>
+      <h2>{t('어디서든 (전역)')}</h2>
+      <p class="lead">{t('런처 창이 숨어 있어도 동작해요. 다른 앱과 겹치면 켜지지 않을 수 있어요.')}</p>
+      <Row label={t('빠른 실행 열기')} desc={t('어디서든 눌러 검색하고 Enter로 실행')}>
+        <HotkeyInput value={s.quickHotkey} onchange={(v) => set('quickHotkey', v)} />
+        <Switch checked={s.quickHotkeyEnabled} onchange={(v) => set('quickHotkeyEnabled', v)} />
+      </Row>
+      <Row label={t('런처 창 ⇄ 플로팅')}>
+        <HotkeyInput value={s.floatHotkey} onchange={(v) => set('floatHotkey', v)} />
+        <Switch checked={s.floatHotkeyEnabled} onchange={(v) => set('floatHotkeyEnabled', v)} />
+      </Row>
+      <Row label={t('가장 여유 있는 Claude 실행')} desc={t('5시간·주간 사용량이 가장 낮은 Claude 인스턴스를 띄워요')}>
+        <HotkeyInput value={s.bestClaudeHotkey} onchange={(v) => set('bestClaudeHotkey', v)} />
+        <Switch checked={s.bestClaudeHotkeyEnabled} onchange={(v) => set('bestClaudeHotkeyEnabled', v)} />
+      </Row>
+      {#each SECTIONS as sec (sec.id)}
+        <h2>{t('런처 창')} · {sec.label()}</h2>
+        {#each BINDINGS.filter((b) => b.section === sec.id) as b (b.id)}
+          {@const custom = s.keymap?.[b.id]}
+          <Row label={b.label()}>
+            {#if b.fixed}
+              <span class="keys">{#each b.keys.split(' / ') as alt, ai (ai)}{#if ai > 0}<span class="faint">/</span>{/if}{#each caps(alt) as c, k (k)}<span class="kbd">{c}</span>{/each}{/each}</span>
+            {:else}
+              <HotkeyInput app value={keysOf(b.id)} onchange={(v) => set('keymap', { ...s.keymap, [b.id]: v })} />
+              <button class="icon-btn sm" title={t('지우기')} aria-label={t('지우기')} disabled={!keysOf(b.id)} onclick={() => set('keymap', { ...s.keymap, [b.id]: '' })}><Icon name="x" size={14} /></button>
+              <button class="icon-btn sm" title={t('기본값으로')} aria-label={t('기본값으로')} disabled={custom === undefined} onclick={() => {
+                const next = { ...s.keymap }
+                delete next[b.id]
+                set('keymap', next)
+              }}><Icon name="refresh" size={14} /></button>
+            {/if}
+          </Row>
+        {/each}
+      {/each}
     {:else if ui.settingsTab === 'taskbar'}
       <h1>{t('작업 표시줄')}</h1>
       <p class="lead">{t('여기 설정은 모든 인스턴스의 기본값입니다. 인스턴스마다 편집 → 고급에서 따로 바꿀 수 있어요.')}</p>
@@ -266,6 +281,13 @@
       </Row>
       <Row label={t('위험 색 기준')} desc={`${s.usageCritPercent}%`}>
         <input type="range" min="50" max="100" value={s.usageCritPercent} onchange={(e) => set('usageCritPercent', +(e.target as HTMLInputElement).value)} />
+      </Row>
+      <h2>{t('알림')}</h2>
+      <Row label={t('한도에 가까워지면 알리기')} desc={t('위험 색 기준을 넘으면 한 번 알리고, 여유 있는 다른 Claude 계정을 함께 알려 줘요')}>
+        <Switch checked={s.notifyLow} onchange={(v) => set('notifyLow', v)} />
+      </Row>
+      <Row label={t('한도가 초기화되면 알리기')} desc={t('한도 임박이었던 기간이 다시 채워지면 알려 줘요')}>
+        <Switch checked={s.notifyReset} onchange={(v) => set('notifyReset', v)} />
       </Row>
       <Row label={t('지금 모두 새로고침')}>
         <button class="btn sm" onclick={() => run(api.refreshUsage())}><Icon name="refresh" size={13} /> {t('새로고침')}</button>
@@ -431,9 +453,14 @@
     color: var(--text);
   }
   .tab.on {
-    background: var(--accent-soft);
+    background: var(--selected);
     color: var(--text);
     font-weight: 600;
+  }
+  .keys {
+    display: flex;
+    align-items: center;
+    gap: 3px;
   }
   .tab.on :global(svg) {
     color: var(--accent);
@@ -450,11 +477,10 @@
     margin: 4px 0 12px;
   }
   h2 {
-    font-size: var(--fs-12);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-3);
-    margin: 22px 0 2px;
+    font-size: var(--fs-13);
+    font-weight: 650;
+    color: var(--text-2);
+    margin: 28px 0 4px;
   }
   .lead {
     color: var(--text-2);

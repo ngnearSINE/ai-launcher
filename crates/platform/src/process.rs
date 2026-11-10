@@ -3,6 +3,16 @@ use std::path::PathBuf;
 
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
+/// Resident memory (bytes) of `pids` added up, and how many of them are still alive. Reads
+/// only those processes, so it is cheap enough to call every few seconds.
+pub fn memory_of(pids: &[u32]) -> (u64, usize) {
+    let list: Vec<sysinfo::Pid> = pids.iter().map(|p| sysinfo::Pid::from_u32(*p)).collect();
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(ProcessesToUpdate::Some(&list), false, ProcessRefreshKind::nothing().with_memory());
+    let alive: Vec<_> = list.iter().filter_map(|p| sys.process(*p)).collect();
+    (alive.iter().map(|p| p.memory()).sum(), alive.len())
+}
+
 /// A running process as seen by the launcher.
 #[derive(Debug, Clone)]
 pub struct Proc {

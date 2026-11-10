@@ -12,10 +12,22 @@ interface UiState {
   label: string
   view: View
   settingsTab: string
+  /** Instance whose edit panel is open. */
   drawer: string | null
+  /** Instance shown in the main pane; null = overview. */
+  selected: string | null
   search: string
-  filter: string
-  layout: 'grid' | 'list'
+  /** Sidebar shrunk to an icon rail (Ctrl+B, or automatically in a narrow window). */
+  railPinned: boolean
+  narrow: boolean
+  palette: boolean
+  help: boolean
+  /** Ctrl/Alt held long enough to show 1–9 badges on the first rows. */
+  numbers: boolean
+  /** Launch requested, waiting for the process to show up (spinning status ring). */
+  launching: Record<string, number>
+  /** Deleted but still undoable: hidden everywhere until the undo window closes. */
+  pendingDelete: string[]
   dark: boolean
   now: number
 }
@@ -27,9 +39,15 @@ export const ui: UiState = $state({
   view: 'home',
   settingsTab: 'general',
   drawer: null,
+  selected: null,
   search: '',
-  filter: 'all',
-  layout: (localStorage.getItem('layout') as 'grid' | 'list') || 'grid',
+  railPinned: localStorage.getItem('rail') === '1',
+  narrow: false,
+  palette: false,
+  help: false,
+  numbers: false,
+  launching: {},
+  pendingDelete: [],
   dark: false,
   now: Date.now(),
 })
@@ -64,52 +82,75 @@ export function visibleOrgs(inst: Instance) {
   return pick.length ? orgs.filter((o) => pick.includes(o.orgUuid)) : orgs
 }
 
-/** Instances after search / filter / sort, for the main grid and the quick panel. */
+/** Every instance the user can see (hidden apps and undoable deletes left out), in the
+ *  chosen sort order. The sidebar, the floating launcher and the palette all start here. */
 export function visibleInstances(opts: { forQuick?: boolean } = {}): Instance[] {
   const s = ui.snap
   if (!s) return []
-  const q = ui.search.trim().toLowerCase()
   let list = s.instances.filter((i) => {
+    if (ui.pendingDelete.includes(i.id)) return false
     if (opts.forQuick && i.advanced.hiddenInQuick) return false
-    const install = installationOf(i)
-    if (install?.hidden) return false
-    if (q) {
-      const email = i.usage?.report?.email ?? ''
-      const hay = `${i.alias} ${install?.name ?? ''} ${email} ${i.note}`.toLowerCase()
-      if (!hay.includes(q)) return false
-    }
-    if (opts.forQuick) return true
-    const f = ui.filter
-    if (f === 'running') return i.running
-    if (f === 'favorite') return i.favorite
-    if (f.startsWith('app:')) return i.installationId === f.slice(4)
-    if (f.startsWith('group:')) return i.groupId === f.slice(6)
-    return true
+    return !installationOf(i)?.hidden
   })
   const sort = s.settings.sort
   if (sort === 'name') list = [...list].sort((a, b) => a.alias.localeCompare(b.alias))
   else if (sort === 'recent') list = [...list].sort((a, b) => (b.lastLaunchedAt ?? '').localeCompare(a.lastLaunchedAt ?? ''))
   else if (sort === 'headroom') list = [...list].sort((a, b) => (headroom(a) ?? 101) - (headroom(b) ?? 101))
-  if (opts.forQuick) list = [...list].sort((a, b) => Number(b.favorite) - Number(a.favorite))
   return list
 }
 
-// ---- toasts / confirm / context menu -------------------------------------------------------
+// ---- toast (one at a time, the newest replaces the last) -------------------------------------
 
+export interface ToastAction {
+  label: string
+  run: () => unknown
+}
 export interface Toast {
   id: number
   text: string
-  kind: 'info' | 'error' | 'ok'
+  kind: 'info' | 'error' | 'ok' | 'warn'
+  action?: ToastAction
+  /** ms; null keeps it until dismissed. */
+  duration: number | null
 }
-export const toasts: Toast[] = $state([])
+export const toastState: { current: Toast | null; paused: boolean } = $state({ current: null, paused: false })
 let toastSeq = 0
-export function toast(text: string, kind: Toast['kind'] = 'info') {
-  const id = ++toastSeq
-  toasts.push({ id, text, kind })
-  setTimeout(() => {
-    const i = toasts.findIndex((x) => x.id === id)
-    if (i >= 0) toasts.splice(i, 1)
-  }, kind === 'error' ? 6000 : 3200)
+let toastTimer: ReturnType<typeof setTimeout> | undefined
+let toastLeft = 0
+let toastStarted = 0
+
+function armToast(ms: number) {
+  clearTimeout(toastTimer)
+  toastStarted = Date.now()
+  toastLeft = ms
+  const id = toastState.current?.id
+  toastTimer = setTimeout(() => {
+    if (toastState.current?.id === id) toastState.current = null
+  }, ms)
+}
+
+export function toast(text: string, kind: Toast['kind'] = 'info', opts: { action?: ToastAction; duration?: number | null } = {}) {
+  const duration = opts.duration !== undefined ? opts.duration : opts.action ? 6000 : kind === 'error' ? 3200 : 2200
+  toastState.current = { id: ++toastSeq, text, kind, action: opts.action, duration }
+  toastState.paused = false
+  clearTimeout(toastTimer)
+  if (duration !== null) armToast(duration)
+}
+
+/** Hovering a toast stops its clock; leaving restarts it with what was left. */
+export function pauseToast(on: boolean) {
+  const cur = toastState.current
+  if (!cur || cur.duration === null || toastState.paused === on) return
+  toastState.paused = on
+  if (on) {
+    clearTimeout(toastTimer)
+    toastLeft = Math.max(800, toastLeft - (Date.now() - toastStarted))
+  } else armToast(toastLeft)
+}
+
+export function dismissToast() {
+  clearTimeout(toastTimer)
+  toastState.current = null
 }
 
 /** Shows a backend error code as a sentence. */
@@ -165,6 +206,7 @@ export interface MenuItem {
   danger?: boolean
   disabled?: boolean
   sep?: boolean
+  checked?: boolean
   action?: () => unknown
 }
 export const menu: { open: boolean; x: number; y: number; items: MenuItem[] } = $state({ open: false, x: 0, y: 0, items: [] })
@@ -175,23 +217,42 @@ export function openMenu(e: MouseEvent | { clientX: number; clientY: number }, i
   menu.open = true
 }
 
-// ---- boot ------------------------------------------------------------------------------------
+// ---- theme -----------------------------------------------------------------------------------
 
+export const THEMES = ['system', 'light', 'dark', 'claude', 'midnight', 'black'] as const
+export type ThemeId = (typeof THEMES)[number]
+/** Dark variants carry their own accent where the look depends on it. */
+const THEME_ACCENT: Partial<Record<ThemeId, string>> = { claude: '#d97757' }
+
+let syncedTheme: 'dark' | 'light' | null | undefined = undefined
 function applyTheme() {
   const s = ui.snap?.settings
   if (!s) return
   const root = document.documentElement
-  const dark = s.theme === 'dark' || (s.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+  const theme = s.theme as ThemeId
+  const variant = theme === 'claude' || theme === 'midnight' || theme === 'black' ? theme : ''
+  const dark = !!variant || theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+  const windowTheme = theme === 'system' ? null : dark ? 'dark' : 'light'
+  if (windowTheme !== syncedTheme) {
+    // The window material (Mica / Acrylic) follows the window's own theme; match the app's,
+    // or a light app sits on a dark-tinted backdrop when Windows is dark (and vice versa).
+    syncedTheme = windowTheme
+    getCurrentWindow().setTheme(windowTheme).catch(() => {})
+  }
   ui.dark = dark
   root.dataset.theme = dark ? 'dark' : 'light'
+  if (variant) root.dataset.variant = variant
+  else delete root.dataset.variant
   root.dataset.glass = s.glass ? 'on' : 'off'
   root.dataset.density = s.density
   root.dataset.motion = s.reduceMotion ? 'reduce' : 'normal'
-  root.style.setProperty('--accent', s.accent)
+  root.style.setProperty('--accent', THEME_ACCENT[theme] ?? s.accent)
   root.style.setProperty('--glass-k', s.glass ? String(s.glassStrength / 100) : '0')
   locale.lang = resolveLang(s.language)
   document.documentElement.lang = locale.lang
 }
+
+// ---- boot ------------------------------------------------------------------------------------
 
 export async function boot() {
   ui.label = getCurrentWindow().label
@@ -200,6 +261,9 @@ export async function boot() {
   await listen<Snapshot>('state', (e) => {
     const iconsStale = (ui.snap?.installations.length ?? 0) !== e.payload.installations.length || e.payload.instances.some((i) => i.running && !ui.icons[i.installationId])
     ui.snap = e.payload
+    // A launch is done once the process shows up.
+    for (const i of e.payload.instances) if (i.running && ui.launching[i.id]) delete ui.launching[i.id]
+    if (ui.selected && !e.payload.instances.some((i) => i.id === ui.selected)) ui.selected = null
     applyTheme()
     if (iconsStale) loadIcons()
   })
@@ -207,7 +271,13 @@ export async function boot() {
     if (e.payload === 'settings') ui.view = 'settings'
   })
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme)
-  setInterval(() => (ui.now = Date.now()), 30_000)
+  // Countdowns are in minutes, so a coarse clock is enough (and keeps every window idle).
+  setInterval(() => (ui.now = Date.now()), 15_000)
+  setInterval(() => {
+    // Give up on the spinner if the app never appeared (it may have refused to start).
+    const now = Date.now()
+    for (const [id, at] of Object.entries(ui.launching)) if (now - at > 20_000) delete ui.launching[id]
+  }, 2000)
   loadIcons()
 }
 

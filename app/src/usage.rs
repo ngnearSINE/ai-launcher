@@ -141,8 +141,94 @@ async fn tick(core: &Arc<Core>) {
                 }
             }
         }
+        alerts(core, &id);
         core.broadcast();
     }
+}
+
+/// Last seen state per (instance, window): over the critical line or not, and which reset it
+/// belongs to. Only changes seen while the launcher runs raise a notification, so restarting
+/// it never repeats one.
+static SEEN: std::sync::LazyLock<parking_lot::Mutex<std::collections::HashMap<(String, &'static str), (bool, Option<DateTime<Utc>>)>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// "Running low" (with the Claude account that has the most room) and "reset" notifications.
+fn alerts(core: &Core, id: &str) {
+    let s = core.settings();
+    if !s.notify_low && !s.notify_reset {
+        return;
+    }
+    let Some(inst) = core.instance(id) else { return };
+    let Some(report) = core.usage.lock().get(id).and_then(|e| e.report.clone()) else { return };
+    let pick = &inst.advanced.usage_orgs;
+    let Some(org) = report.orgs.iter().find(|o| pick.is_empty() || pick.contains(&o.org_uuid)) else { return };
+    let lang = crate::i18n::lang(&s);
+    let tr = |key: &str, vars: &[(&str, String)]| {
+        let mut out = crate::i18n::t(lang, key);
+        for (k, v) in vars {
+            out = out.replace(&format!("{{{k}}}"), v);
+        }
+        out
+    };
+    for q in &org.quotas {
+        let (kind, wkey) = match q.kind {
+            QuotaKind::FiveHour => ("5h", "window.5h"),
+            QuotaKind::Weekly => ("weekly", "window.weekly"),
+            _ => continue,
+        };
+        let crit = q.used_percent >= s.usage_crit_percent as f64;
+        let prev = SEEN.lock().insert((id.to_string(), kind), (crit, q.resets_at));
+        let Some((was_crit, was_reset)) = prev else { continue };
+        let window = crate::i18n::t(lang, wkey);
+        if crit && (!was_crit || was_reset != q.resets_at) && s.notify_low {
+            let left = (100.0 - q.used_percent).max(0.0).round();
+            let reset = q.resets_at.map(|r| until_text(lang, r)).unwrap_or_default();
+            let mut body = tr("notify.low.body", &[("left", left.to_string()), ("reset", reset)]);
+            if let Some((name, room)) = roomiest_other(core, id) {
+                body = format!("{body}\n{}", tr("notify.low.suggest", &[("name", name), ("left", room.to_string())]));
+            }
+            notify(core, &tr("notify.low.title", &[("name", inst.alias.clone()), ("window", window)]), &body);
+        } else if !crit && was_crit && was_reset != q.resets_at && s.notify_reset {
+            notify(core, &tr("notify.reset.title", &[("name", inst.alias.clone()), ("window", window)]), &crate::i18n::t(lang, "notify.reset.body"));
+        }
+    }
+}
+
+/// The other Claude instance with the most room, as (alias, % left of its tighter window).
+fn roomiest_other(core: &Core, id: &str) -> Option<(String, i64)> {
+    let claude: Vec<(String, String)> = {
+        let store = core.store.lock();
+        let data = &store.data;
+        data.instances
+            .iter()
+            .filter(|i| i.id != id && data.installations.iter().any(|x| x.id == i.installation_id && x.adapter == "claude" && x.present))
+            .map(|i| (i.id.clone(), i.alias.clone()))
+            .collect()
+    };
+    let usage = core.usage.lock();
+    claude
+        .into_iter()
+        .filter_map(|(iid, alias)| usage.get(&iid).and_then(|u| u.headroom_score()).map(|used| (alias, used)))
+        .filter(|(_, used)| *used < 90.0)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(alias, used)| (alias, (100.0 - used).round() as i64))
+}
+
+fn until_text(lang: &str, at: DateTime<Utc>) -> String {
+    let mins = (at - Utc::now()).num_minutes().max(1);
+    let (d, h, m) = (mins / 1440, (mins % 1440) / 60, mins % 60);
+    let ko = lang == "ko";
+    match (d, h) {
+        (d, h) if d > 0 => if ko { format!("{d}일 {h}시간") } else { format!("{d}d {h}h") },
+        (_, h) if h > 0 => if ko { format!("{h}시간 {m}분") } else { format!("{h}h {m}m") },
+        _ => if ko { format!("{m}분") } else { format!("{m}m") },
+    }
+}
+
+fn notify(core: &Core, title: &str, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    log::info!("notify: {title}");
+    let _ = core.app.notification().builder().title(title).body(body).show();
 }
 
 fn set_status(core: &Core, id: &str, status: &'static str) {

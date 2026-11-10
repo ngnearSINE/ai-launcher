@@ -125,12 +125,17 @@ pub async fn check(core: &Arc<Core>, manual: bool) {
     };
     let update = match found {
         Ok(Some(u)) => u,
-        Ok(None) => return set(core, UpdateState::Latest { checked_at: Utc::now() }),
+        Ok(None) => {
+            // Logged so the log shows background checks are running, not only when they fail.
+            log::info!("update check: up to date ({})", core.app.package_info().version);
+            return set(core, UpdateState::Latest { checked_at: Utc::now() });
+        }
         Err(e) => {
             let text = e.to_string();
             log::warn!("update check: {text}");
             // No release published yet looks like a 404 on latest.json; that is "up to date".
             if text.contains("404") || text.contains("valid release JSON") {
+                log::info!("update check: no release published, treated as up to date");
                 return set(core, UpdateState::Latest { checked_at: Utc::now() });
             }
             let message = if text.contains("error sending request") || text.contains("dns") { "network" } else { "check" };

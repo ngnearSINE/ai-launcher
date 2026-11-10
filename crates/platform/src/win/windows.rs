@@ -1,12 +1,67 @@
 //! Finding, focusing and closing the top-level windows of processes.
 
 use ::windows::core::BOOL;
-use ::windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use ::windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
 use ::windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, EnumWindows, GetWindow, GetWindowLongW, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic,
-    IsWindowVisible, PostMessageW, SetForegroundWindow, ShowWindow, GWL_EXSTYLE, GW_OWNER, SW_RESTORE, WM_CLOSE,
-    WS_EX_TOOLWINDOW,
+    BringWindowToTop, EnumWindows, GetWindow, GetWindowLongW, GetWindowPlacement, GetWindowRect, GetWindowTextLengthW,
+    GetWindowThreadProcessId, IsIconic, IsWindowVisible, PostMessageW, SetForegroundWindow, SetWindowPlacement, ShowWindow,
+    GWL_EXSTYLE, GW_OWNER, SW_HIDE, SW_RESTORE, WINDOWPLACEMENT, WM_CLOSE, WPF_RESTORETOMAXIMIZED, WS_EX_TOOLWINDOW,
 };
+
+/// Where Windows parks minimised windows.
+const PARKED: i32 = -32000;
+
+/// Placements saved by [`remember_placement`], by window handle.
+static SAVED: std::sync::Mutex<Vec<(isize, WINDOWPLACEMENT)>> = std::sync::Mutex::new(Vec::new());
+
+fn placement(h: HWND) -> Option<WINDOWPLACEMENT> {
+    let mut wp = WINDOWPLACEMENT { length: std::mem::size_of::<WINDOWPLACEMENT>() as u32, ..Default::default() };
+    unsafe { GetWindowPlacement(h, &mut wp).ok()? };
+    Some(wp)
+}
+
+/// Hiding a minimised window (tao rewrites its style) drops the minimised state and the
+/// remembered normal rectangle, leaving it parked at (-32000, -32000) with a caption-only size.
+/// Call this just before hiding: while the window is still minimised, its placement still knows
+/// where it belongs. [`unpark_hidden`] puts it back there.
+pub fn remember_placement(hwnd: isize) {
+    let h = HWND(hwnd as _);
+    if !unsafe { IsIconic(h) }.as_bool() {
+        return;
+    }
+    if let (Some(wp), Ok(mut saved)) = (placement(h), SAVED.lock()) {
+        saved.retain(|(k, _)| *k != hwnd);
+        saved.push((hwnd, wp));
+    }
+}
+
+/// Moves a hidden window left parked at the minimised position back to the rectangle saved by
+/// [`remember_placement`] (or, failing that, to wherever Windows still has it), still hidden.
+/// Returns `Some(true)` when it was maximised before, so the caller can maximise it again
+/// after showing it; `None` when nothing needed fixing.
+pub fn unpark_hidden(hwnd: isize) -> Option<bool> {
+    let h = HWND(hwnd as _);
+    let saved = SAVED.lock().ok().and_then(|mut s| {
+        let i = s.iter().position(|(k, _)| *k == hwnd)?;
+        Some(s.remove(i).1)
+    });
+    unsafe {
+        if IsIconic(h).as_bool() {
+            return None;
+        }
+        let mut r = RECT::default();
+        GetWindowRect(h, &mut r).ok()?;
+        if r.left > PARKED || r.top > PARKED {
+            return None;
+        }
+        let mut wp = saved.or_else(|| placement(h))?;
+        let maximized = wp.flags.0 & WPF_RESTORETOMAXIMIZED.0 != 0;
+        wp.showCmd = SW_HIDE.0 as u32;
+        wp.flags.0 &= !WPF_RESTORETOMAXIMIZED.0;
+        SetWindowPlacement(h, &wp).ok()?;
+        Some(maximized)
+    }
+}
 
 pub fn pid_of(hwnd: isize) -> u32 {
     let mut pid = 0u32;

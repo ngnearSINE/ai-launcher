@@ -8,13 +8,20 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Webview
 
 use crate::core::Core;
 
-const QUICK_W: f64 = 380.0;
+const QUICK_W: f64 = 440.0;
 const QUICK_H: f64 = 560.0;
 
 pub fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
+        // Hidden while minimised (taskbar minimise → floating): bring it back on screen first.
+        #[cfg(windows)]
+        let maximize = w.hwnd().ok().and_then(|h| launcher_platform::win::windows::unpark_hidden(h.0 as isize)).unwrap_or(false);
         let _ = w.unminimize();
         let _ = w.show();
+        #[cfg(windows)]
+        if maximize {
+            let _ = w.maximize();
+        }
         let _ = w.set_focus();
     }
 }
@@ -25,6 +32,10 @@ pub fn hide_main(app: &AppHandle) {
 
 pub fn hide(app: &AppHandle, label: &str) {
     if let Some(w) = app.get_webview_window(label) {
+        #[cfg(windows)]
+        if let Ok(h) = w.hwnd() {
+            launcher_platform::win::windows::remember_placement(h.0 as isize);
+        }
         let _ = w.hide();
     }
 }
@@ -210,6 +221,7 @@ pub fn apply_appearance(app: &AppHandle, core: &Arc<Core>) {
 /// (default) the one being left is hidden; with `both` the main window stays open.
 pub fn switch_view(app: &AppHandle, core: &Arc<Core>, to_float: bool) {
     let swap = core.settings().float_switch != "both";
+    log::info!("switch view → {}", if to_float { "float" } else { "main" });
     if to_float {
         if !core.settings().float_enabled {
             let _ = core.mutate(true, |d| {
@@ -247,7 +259,16 @@ pub fn on_event(window: &Window, event: &WindowEvent) {
         ("main", WindowEvent::CloseRequested { api, .. }) => {
             if core.settings().close_to_tray {
                 api.prevent_close();
-                let _ = window.hide();
+                hide(app, "main");
+            }
+        }
+        // Minimised by the OS (taskbar button, Win+↓) rather than the title-bar button: same
+        // switch. Off the event thread, because switching may create the floating window.
+        ("main", WindowEvent::Resized(_)) => {
+            if core.settings().minimize_to_float && window.is_minimized().unwrap_or(false) {
+                log::info!("main window minimised by the OS");
+                let (app, core) = (app.clone(), core.inner().clone());
+                tauri::async_runtime::spawn(async move { switch_view(&app, &core, true) });
             }
         }
         ("quick", WindowEvent::Focused(false)) => {

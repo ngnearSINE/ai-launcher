@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Toasts and the confirm dialog, mounted once per window.
-  import { dialogs, toasts } from '../lib/state.svelte'
+  // Toast and the confirm dialog, mounted once per window.
+  import { dialogs, dismissToast, pauseToast, toastState } from '../lib/state.svelte'
   import { t } from '../lib/i18n.svelte'
   import Modal from './Modal.svelte'
   import ContextMenu from './ContextMenu.svelte'
@@ -15,6 +15,7 @@
     dialogs.confirm = null
     c?.resolve({ ok, checked })
   }
+  const ICON = { error: 'alert', warn: 'alert', ok: 'check', info: 'info' } as const
 </script>
 
 <ContextMenu />
@@ -34,13 +35,22 @@
   </Modal>
 {/if}
 
-<div class="toasts" aria-live="polite">
-  {#each toasts as x (x.id)}
-    <div class="toast {x.kind}">
-      <Icon name={x.kind === 'error' ? 'alert' : x.kind === 'ok' ? 'check' : 'info'} size={14} />
-      <span>{x.text}</span>
-    </div>
-  {/each}
+<!-- One toast at a time; a new one replaces it. Hover holds it. -->
+<div class="region" aria-live="polite">
+  {#if toastState.current}
+    {@const x = toastState.current}
+    {#key x.id}
+      <div class="toast {x.kind}" role="status" onmouseenter={() => pauseToast(true)} onmouseleave={() => pauseToast(false)}>
+        <span class="ic"><Icon name={ICON[x.kind]} size={16} /></span>
+        <span class="txt">{x.text}</span>
+        {#if x.action}
+          {@const a = x.action}
+          <button class="act" onclick={() => (a.run(), dismissToast())}>{a.label}</button>
+        {/if}
+        <button class="x" aria-label={t('닫기')} onclick={dismissToast}><Icon name="x" size={13} /></button>
+      </div>
+    {/key}
+  {/if}
 </div>
 
 <style>
@@ -58,40 +68,74 @@
   :global(.btn.primary.danger-fill) {
     background: var(--crit);
   }
-  .toasts {
+  .region {
     position: fixed;
     left: 50%;
     bottom: 18px;
     transform: translateX(-50%);
     z-index: 80;
-    display: grid;
-    gap: 8px;
-    justify-items: center;
     pointer-events: none;
   }
   .toast {
+    pointer-events: auto;
     display: flex;
     align-items: center;
-    gap: 8px;
-    max-width: 520px;
-    padding: 9px 14px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--surface-solid) 96%, transparent);
+    gap: 10px;
+    max-width: min(480px, calc(100vw - 32px));
+    padding: 8px 8px 8px 12px;
+    border-radius: var(--r-md);
+    background: var(--surface-solid);
     border: 1px solid var(--line);
     box-shadow: var(--shadow-pop);
     font-size: var(--fs-13);
-    animation: up 180ms var(--ease);
+    animation: up 140ms var(--ease);
   }
-  .toast.error {
-    color: var(--crit);
+  .ic {
+    display: grid;
+    color: var(--text-2);
   }
-  .toast.ok :global(svg) {
-    color: var(--ok);
+  .ok .ic {
+    color: var(--st-ok);
+  }
+  .warn .ic {
+    color: var(--st-warn);
+  }
+  .error .ic {
+    color: var(--st-crit);
+  }
+  .txt {
+    flex: 1;
+    min-width: 0;
+  }
+  .act {
+    border: 0;
+    background: var(--accent-softer);
+    color: var(--accent);
+    font-weight: 600;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: var(--r-sm);
+  }
+  .act:hover {
+    background: var(--accent-soft);
+  }
+  .x {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 0;
+    border-radius: var(--r-xs);
+    background: none;
+    color: var(--text-3);
+  }
+  .x:hover {
+    background: var(--surface-hover);
   }
   @keyframes up {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(6px);
     }
   }
 </style>

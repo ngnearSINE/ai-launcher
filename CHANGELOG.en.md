@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0
+
+A redesigned main window.
+
+- A sidebar and a single pane instead of the card grid: instances grouped by status (needs attention, running low, running, idle) with pinned ones on top. Grouping, sorting and what each row shows live under "Display" at the bottom of the sidebar; on a narrow window it folds to an icon rail
+- Overview: the best Claude account to use now and usage per account. Select an instance to see its usage, memory and folder
+- Command palette (`Ctrl+K`): launch or switch to any instance and run any command; the tray quick launch is the same list
+- Shortcuts: `Ctrl+1`–`9` (hold `Ctrl` to see the numbers), `↑` `↓`, `Ctrl+B` to fold the sidebar, `?` for every shortcut. In-window and global shortcuts are remappable in Settings → Shortcuts
+- Usage alerts now actually fire: when an account runs low it names one with room, and it tells you when a limit resets
+- Themes: system, light, dark, Claude, Midnight and pure black; the window backdrop follows the theme
+- Status badges on icons (needs attention, warning, running, starting), one notification at a time, and deletes can be undone for 6 seconds (`Ctrl+Z`)
+- Minimising the main window switches to the floating launcher (on by default; turn it off in Settings to get the title-bar button back)
+- Fixed: a window hidden while minimised reopened tiny and off-screen
+
 ## 0.1.0
 
 First public release.

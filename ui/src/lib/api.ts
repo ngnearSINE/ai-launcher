@@ -43,6 +43,7 @@ export const api = {
   switchView: (to: 'float' | 'main') => invoke<void>('switch_view', { to }),
   fitFloat: (width: number, height: number) => invoke<void>('fit_float', { width, height }),
   addInstalledWebApp:(appId: string) => invoke<string>('add_installed_web_app', { appId }),
+  instanceStats: (id: string) => invoke<{ memory: number; processes: number }>('instance_stats', { id }),
   checkUpdate: () => invoke<void>('check_update'),
   installUpdate: () => invoke<boolean>('install_update'),
 }

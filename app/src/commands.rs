@@ -44,6 +44,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         open_config_dir,
         create_shortcut,
         profile_size,
+        instance_stats,
         export_catalog,
         import_catalog,
         show_window,
@@ -72,6 +73,7 @@ async fn fit_float(app: AppHandle, width: f64, height: f64) -> Res<()> {
 /// `to`: `float` or `main`. Async: it may create the floating window.
 #[tauri::command]
 async fn switch_view(app: AppHandle, core: State<'_, Arc<Core>>, to: String) -> Res<()> {
+    log::info!("switch view requested by the UI");
     crate::windows::switch_view(&app, core.inner(), to == "float");
     Ok(())
 }
@@ -480,6 +482,21 @@ async fn profile_size(core: State<'_, Arc<Core>>, id: String) -> Res<u64> {
     let inst = core.instance(&id).ok_or("instance-missing")?;
     let dir = core.profile_dir_of(&inst).ok_or("no-profile")?;
     Ok(tauri::async_runtime::spawn_blocking(move || dir_size(&dir)).await.unwrap_or(0))
+}
+
+#[derive(serde::Serialize)]
+struct InstanceStats {
+    memory: u64,
+    processes: usize,
+}
+
+/// Memory of a running instance (all its processes). Polled by the detail pane only while it
+/// shows that instance.
+#[tauri::command]
+async fn instance_stats(core: State<'_, Arc<Core>>, id: String) -> Res<InstanceStats> {
+    let pids = core.run_info(&id).map(|r| r.pids).unwrap_or_default();
+    let (memory, processes) = tauri::async_runtime::spawn_blocking(move || launcher_platform::process::memory_of(&pids)).await.map_err(|e| e.to_string())?;
+    Ok(InstanceStats { memory, processes })
 }
 
 fn dir_size(p: &Path) -> u64 {

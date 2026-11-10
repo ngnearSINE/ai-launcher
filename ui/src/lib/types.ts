@@ -4,7 +4,7 @@ export type Tristate = 'inherit' | 'on' | 'off'
 
 export interface Settings {
   language: 'system' | 'ko' | 'en'
-  theme: 'system' | 'light' | 'dark'
+  theme: 'system' | 'light' | 'dark' | 'claude' | 'midnight' | 'black'
   accent: string
   glass: boolean
   glassStrength: number
@@ -14,6 +14,10 @@ export interface Settings {
   cardUsageStyle: 'bars' | 'compact'
   sort: 'manual' | 'name' | 'recent' | 'headroom'
   groupBy: 'none' | 'app' | 'group'
+  sidebarGroup: 'status' | 'app' | 'group' | 'none'
+  sidebarShowAccount: boolean
+  sidebarShowUsage: boolean
+  keymap: Record<string, string>
   startWithOs: boolean
   startHidden: boolean
   closeToTray: boolean
@@ -35,6 +39,7 @@ export interface Settings {
   floatSize: number
   floatPosition: [number, number] | null
   floatSwitch: 'swap' | 'both'
+  minimizeToFloat: boolean
   floatHotkey: string
   floatHotkeyEnabled: boolean
   taskbarSeparate: boolean

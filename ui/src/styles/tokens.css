@@ -1,15 +1,22 @@
 /* Design tokens. Every component reads these; nothing hard-codes colours or sizes.
-   Light is the base; dark overrides. --accent and --glass-k are set at runtime from settings. */
+   Layers (Paseo-style, research: .agents/memory/paseo-research.md): the window backdrop and the
+   sidebar sit on --bg (lets Mica/Acrylic through when glass is on); the content pane is one
+   step up (--layer); popovers and dialogs one more (--surface-solid). Steps come from
+   brightness, not borders.
+   Light is the base; [data-theme='dark'] and the dark variants override.
+   --accent and --glass-k are set at runtime from settings. */
 :root {
   --font: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif;
   --mono: 'Cascadia Mono', 'SF Mono', Consolas, ui-monospace, monospace;
 
-  --fs-11: 11px;
+  /* Type: 12 is the floor (secondary text), 13 body, 15/18/22 headings. --fs-11 stays as an
+     alias so nothing renders below 12px. */
+  --fs-11: 12px;
   --fs-12: 12px;
   --fs-13: 13px;
   --fs-14: 14px;
   --fs-15: 15px;
-  --fs-17: 17px;
+  --fs-17: 18px;
   --fs-22: 22px;
   --fs-28: 28px;
 
@@ -21,47 +28,53 @@
   --sp-6: 24px;
   --sp-8: 32px;
 
+  --r-xs: 4px;
   --r-sm: 6px;
   --r-md: 8px;
   --r-lg: 12px;
-  --r-card: 14px;
-  --r-modal: 18px;
+  --r-card: 8px;
+  --r-modal: 12px;
   --r-pill: 999px;
 
   --ctl-h: 32px;
   --ctl-h-sm: 26px;
+  --row-h: 36px;
+  --sidebar-w: 248px;
 
   --accent: #0a84ff;
   --accent-contrast: #ffffff;
-  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
-  --accent-softer: color-mix(in srgb, var(--accent) 8%, transparent);
-
-  --ok: #28a745;
-  --warn: #f59e0b;
-  --crit: #ef4444;
-  --run: #30d158;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-softer: color-mix(in srgb, var(--accent) 9%, transparent);
 
   --glass-k: 0.45;
 
-  /* light */
-  --bg-solid: #f5f5f7;
-  --bg: rgba(245, 245, 247, calc(0.94 - var(--glass-k) * 0.6));
-  --surface: rgba(255, 255, 255, 0.86);
-  --surface-solid: #ffffff;
-  --surface-2: rgba(0, 0, 0, 0.035);
-  --surface-hover: rgba(0, 0, 0, 0.05);
-  --surface-press: rgba(0, 0, 0, 0.08);
-  --well: rgba(0, 0, 0, 0.045);
-  --line: rgba(0, 0, 0, 0.08);
-  --line-strong: rgba(0, 0, 0, 0.14);
-  --text: #1d1d1f;
-  --text-2: rgba(29, 29, 31, 0.68);
-  --text-3: rgba(29, 29, 31, 0.46);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 14px rgba(0, 0, 0, 0.04);
-  --shadow-pop: 0 10px 40px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.06);
-  --track: rgba(0, 0, 0, 0.07);
-  --tick: rgba(0, 0, 0, 0.55);
+  /* light surfaces */
+  --s0: #ffffff;
+  --s1: #fafafa;
+  --s2: #f4f4f5;
+  --s3: #e4e4e7;
+  --s4: #d4d4d8;
+  --sidebar: #f1f1f3;
+  --fg: #18181b;
+  --fg-2: #5f5f68;
+  --fg-3: #8e8e98;
+  --border: #e4e4e7;
+
+  /* Status: text/icon colours (calm) and a brighter band for small dots, bars and rings. */
+  --st-ok: #3e704a;
+  --st-warn: #7b5d39;
+  --st-crit: #9d433b;
+  --dot-ok: #299f51;
+  --dot-warn: #b37824;
+  --dot-crit: #f12e2f;
+  --dot-run: #268ae0;
+
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --hover: rgba(0, 0, 0, 0.045);
+  --press: rgba(0, 0, 0, 0.08);
+  --selected: rgba(0, 0, 0, 0.07);
   --scrim: rgba(0, 0, 0, 0.22);
+  --tick: rgba(0, 0, 0, 0.6);
 
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur: 160ms;
@@ -69,30 +82,97 @@
 }
 
 :root[data-theme='dark'] {
-  --bg-solid: #161618;
-  /* Translucent so the window material (Mica Alt / Acrylic) shows through; --glass-k is the
-     "transparency" setting. Cards stay a step lighter than the backdrop. */
-  --bg: rgba(20, 20, 22, calc(0.92 - var(--glass-k) * 0.7));
-  --surface: rgba(255, 255, 255, calc(0.045 + (1 - var(--glass-k)) * 0.035));
-  --surface-solid: #232326;
-  --surface-2: rgba(255, 255, 255, 0.045);
-  --surface-hover: rgba(255, 255, 255, 0.07);
-  --surface-press: rgba(255, 255, 255, 0.11);
-  --well: rgba(255, 255, 255, 0.055);
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.15);
-  --text: #f5f5f7;
-  --text-2: rgba(245, 245, 247, 0.74);
-  --text-3: rgba(245, 245, 247, 0.56);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-pop: 0 14px 48px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
-  --track: rgba(255, 255, 255, 0.12);
+  --s0: #1b1b1d;
+  --s1: #212124;
+  --s2: #2a2a2d;
+  --s3: #3f3f43;
+  --s4: #56565b;
+  --sidebar: #151517;
+  --fg: #f4f4f5;
+  --fg-2: #a1a1aa;
+  --fg-3: #74747c;
+  --border: #2b2b2f;
+
+  --st-ok: #6cb17b;
+  --st-warn: #c09664;
+  --st-crit: #d8847b;
+  --dot-ok: #35c264;
+  --dot-warn: #db932e;
+  --dot-crit: #f7796d;
+  --dot-run: #5caaf6;
+
+  --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --hover: rgba(255, 255, 255, 0.055);
+  --press: rgba(255, 255, 255, 0.1);
+  --selected: rgba(255, 255, 255, 0.085);
+  --scrim: rgba(0, 0, 0, 0.5);
   --tick: rgba(255, 255, 255, 0.9);
-  --scrim: rgba(0, 0, 0, 0.45);
-  --ok: #32d74b;
-  --warn: #ffb340;
-  --crit: #ff6961;
   color-scheme: dark;
+}
+
+/* Dark variants (theme picker). Same roles, different tint. */
+:root[data-variant='claude'] {
+  --s0: #262624;
+  --s1: #2c2c2a;
+  --s2: #343432;
+  --s3: #4a4946;
+  --s4: #605f5b;
+  --sidebar: #1f1f1e;
+  --fg: #f5f4ef;
+  --fg-2: #aaa79e;
+  --fg-3: #7a776f;
+  --border: #383733;
+}
+:root[data-variant='midnight'] {
+  --s0: #121826;
+  --s1: #171e2e;
+  --s2: #1f2738;
+  --s3: #343d52;
+  --s4: #4a546c;
+  --sidebar: #0d121d;
+  --fg: #eef2f9;
+  --fg-2: #9ba4b7;
+  --fg-3: #6d7589;
+  --border: #232c3e;
+}
+:root[data-variant='black'] {
+  --s0: #000000;
+  --s1: #0b0b0c;
+  --s2: #151516;
+  --s3: #2b2b2d;
+  --s4: #414144;
+  --sidebar: #000000;
+  --fg: #f5f5f5;
+  --fg-2: #a3a3a3;
+  --fg-3: #737373;
+  --border: #1d1d1f;
+}
+
+/* Roles every component uses, derived from the layer steps above. */
+:root {
+  --bg-solid: var(--sidebar);
+  --bg: color-mix(in srgb, var(--sidebar) calc((0.94 - var(--glass-k) * 0.62) * 100%), transparent);
+  --layer: color-mix(in srgb, var(--s0) calc((1 - var(--glass-k) * 0.22) * 100%), transparent);
+  --surface: var(--s1);
+  --surface-solid: var(--s0);
+  --surface-2: var(--s2);
+  --surface-hover: var(--hover);
+  --surface-press: var(--press);
+  --well: var(--s2);
+  --line: var(--border);
+  --line-strong: var(--s3);
+  --track: var(--s3);
+  --text: var(--fg);
+  --text-2: var(--fg-2);
+  --text-3: var(--fg-3);
+  --shadow-card: none;
+  --ok: var(--dot-ok);
+  --warn: var(--dot-warn);
+  --crit: var(--dot-crit);
+  --run: var(--dot-run);
+}
+:root[data-theme='dark'] {
+  --surface-solid: var(--s1);
 }
 
 :root[data-glass='off'] {
@@ -100,9 +180,9 @@
 }
 
 :root[data-density='compact'] {
+  --row-h: 30px;
   --sp-4: 12px;
   --sp-5: 16px;
-  --r-card: 12px;
 }
 
 @media (prefers-reduced-motion: reduce) {

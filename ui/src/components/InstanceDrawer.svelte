@@ -1,13 +1,12 @@
 <script lang="ts">
   import { api } from '../lib/api'
-  import { deleteInstance, launch, quitInstance } from '../lib/actions'
+  import { deleteInstance } from '../lib/actions'
   import { bytes, ago } from '../lib/format'
   import { t } from '../lib/i18n.svelte'
   import { installationOf, instanceById, run, ui } from '../lib/state.svelte'
   import type { Instance, InstanceAdvanced, LaunchOptions, Tristate } from '../lib/types'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
-  import UsageMeters from './UsageMeters.svelte'
   import { ColorPick, Row, Segmented, Switch } from './controls'
 
   const inst = $derived(instanceById(ui.drawer))
@@ -67,23 +66,6 @@
       </div>
       <button class="icon-btn" aria-label={t('닫기')} onclick={() => (ui.drawer = null)}><Icon name="x" size={18} /></button>
     </header>
-
-    <div class="actions">
-      {#if inst.running}
-        <button class="btn primary" onclick={() => run(api.focus(inst.id))}><Icon name="focus" size={14} /> {t('앞으로 가져오기')}</button>
-        <button class="btn" onclick={() => run(api.restart(inst.id))}><Icon name="refresh" size={14} /> {t('다시 시작')}</button>
-        <button class="btn danger" onclick={() => quitInstance(inst)}><Icon name="power" size={14} /> {t('종료')}</button>
-      {:else}
-        <button class="btn primary" disabled={!install?.present} onclick={() => launch(inst)}><Icon name="play" size={12} /> {t('실행')}</button>
-      {/if}
-    </div>
-
-    {#if install?.hasUsage}
-      <section class="usage">
-        <UsageMeters {inst} detail />
-        {#if inst.usage?.report?.email}<div class="faint small acct"><Icon name="user" size={12} /> {inst.usage.report.email}</div>{/if}
-      </section>
-    {/if}
 
     <div class="tabs">
       <Segmented
@@ -248,23 +230,6 @@
   }
   .small {
     font-size: var(--fs-12);
-  }
-  .actions {
-    display: flex;
-    gap: 8px;
-    padding: 4px 18px 12px;
-  }
-  .usage {
-    margin: 0 18px 12px;
-    padding: 12px;
-    border-radius: var(--r-lg);
-    background: var(--well);
-  }
-  .acct {
-    margin-top: 8px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
   }
   .tabs {
     padding: 0 18px 4px;

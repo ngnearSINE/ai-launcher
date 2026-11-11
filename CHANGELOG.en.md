@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- When one account (e.g. a work email with both a team and a personal organisation) is signed in to several instances, an instance with no organisation picked now leaves out the ones another instance already shows. A personal instance set up after a team one no longer shows the same usage. This applies to the sidebar, details, floating launcher, alerts and the suggested account; "Organisations to show" in the edit panel marks the automatic choice
+
 ## 0.2.0
 
 A redesigned main window.

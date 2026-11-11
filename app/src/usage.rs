@@ -2,12 +2,13 @@
 //! profile, the CLI or the app's default folder unless that *is* the instance's folder).
 //! Requests are spaced per instance, and HTTP 429 backs off progressively.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use launcher_core::catalog::effective;
-use launcher_core::UsageKind;
+use launcher_core::{Instance, UsageKind};
 use launcher_usage::{claude, QuotaKind, UsageError, UsageReport};
 use serde::Serialize;
 
@@ -35,15 +36,42 @@ impl UsageEntry {
         Self { status: "idle", report: None, error: None, next_at: Utc::now(), strikes: 0, source }
     }
 
-    /// Higher = less headroom. Uses the worst of 5-hour and weekly of the first organisation.
-    pub fn headroom_score(&self) -> Option<f64> {
-        let org = self.report.as_ref()?.orgs.first()?;
+    /// Higher = less headroom. Uses the worst of 5-hour and weekly of the first organisation
+    /// the instance shows (`shown`, from [`shown_orgs`]).
+    pub fn headroom_score(&self, shown: &[String]) -> Option<f64> {
+        let report = self.report.as_ref()?;
+        let org = report.orgs.iter().find(|o| shown.contains(&o.org_uuid)).or(report.orgs.first())?;
         org.quotas
             .iter()
             .filter(|q| matches!(q.kind, QuotaKind::FiveHour | QuotaKind::Weekly))
             .map(|q| q.used_percent)
             .reduce(f64::max)
     }
+}
+
+/// Organisations instance `id` shows (its own pick, else the ones no other instance of the
+/// same account already stands for). Empty when there is no report yet.
+pub fn shown_orgs(instances: &[Instance], usage: &HashMap<String, UsageEntry>, id: &str) -> Vec<String> {
+    let Some(me) = usage.get(id).and_then(|e| e.report.as_ref()) else { return Vec::new() };
+    let pick_of = |iid: &str| instances.iter().find(|i| i.id == iid).map(|i| i.advanced.usage_orgs.as_slice()).unwrap_or(&[]);
+    let others: Vec<(&UsageReport, &[String])> = usage
+        .iter()
+        .filter(|(k, _)| k.as_str() != id && instances.iter().any(|i| &i.id == *k))
+        .filter_map(|(k, e)| e.report.as_ref().map(|r| (r, pick_of(k))))
+        .collect();
+    launcher_usage::shown_orgs(me, pick_of(id), &others)
+}
+
+/// Headroom score of each listed instance, using what each one shows.
+pub fn scores(core: &Core, ids: &[String]) -> HashMap<String, f64> {
+    let instances = core.store.lock().data.instances.clone();
+    let usage = core.usage.lock();
+    ids.iter()
+        .filter_map(|id| {
+            let shown = shown_orgs(&instances, &usage, id);
+            usage.get(id).and_then(|u| u.headroom_score(&shown)).map(|s| (id.clone(), s))
+        })
+        .collect()
 }
 
 pub fn start(core: Arc<Core>) {
@@ -146,8 +174,9 @@ async fn tick(core: &Arc<Core>) {
     }
 }
 
-/// Last seen state per (instance, window): over the critical line or not, and which reset it
-/// belongs to. Only changes seen while the launcher runs raise a notification, so restarting
+/// Last seen state per (instance/organisation, window): over the critical line or not, and
+/// which reset it belongs to. Keyed by organisation too, so a change of the shown organisation
+/// is not mistaken for a reset. Only changes seen while the launcher runs raise a notification, so restarting
 /// it never repeats one.
 static SEEN: std::sync::LazyLock<parking_lot::Mutex<std::collections::HashMap<(String, &'static str), (bool, Option<DateTime<Utc>>)>>> =
     std::sync::LazyLock::new(Default::default);
@@ -159,9 +188,14 @@ fn alerts(core: &Core, id: &str) {
         return;
     }
     let Some(inst) = core.instance(id) else { return };
-    let Some(report) = core.usage.lock().get(id).and_then(|e| e.report.clone()) else { return };
-    let pick = &inst.advanced.usage_orgs;
-    let Some(org) = report.orgs.iter().find(|o| pick.is_empty() || pick.contains(&o.org_uuid)) else { return };
+    let instances = core.store.lock().data.instances.clone();
+    let (report, shown) = {
+        let usage = core.usage.lock();
+        (usage.get(id).and_then(|e| e.report.clone()), shown_orgs(&instances, &usage, id))
+    };
+    let Some(report) = report else { return };
+    let Some(org) = report.orgs.iter().find(|o| shown.contains(&o.org_uuid)).or(report.orgs.first()) else { return };
+    let seen_key = format!("{id}/{}", org.org_uuid);
     let lang = crate::i18n::lang(&s);
     let tr = |key: &str, vars: &[(&str, String)]| {
         let mut out = crate::i18n::t(lang, key);
@@ -177,7 +211,7 @@ fn alerts(core: &Core, id: &str) {
             _ => continue,
         };
         let crit = q.used_percent >= s.usage_crit_percent as f64;
-        let prev = SEEN.lock().insert((id.to_string(), kind), (crit, q.resets_at));
+        let prev = SEEN.lock().insert((seen_key.clone(), kind), (crit, q.resets_at));
         let Some((was_crit, was_reset)) = prev else { continue };
         let window = crate::i18n::t(lang, wkey);
         if crit && (!was_crit || was_reset != q.resets_at) && s.notify_low {
@@ -205,10 +239,11 @@ fn roomiest_other(core: &Core, id: &str) -> Option<(String, i64)> {
             .map(|i| (i.id.clone(), i.alias.clone()))
             .collect()
     };
-    let usage = core.usage.lock();
+    let ids: Vec<String> = claude.iter().map(|(i, _)| i.clone()).collect();
+    let scores = scores(core, &ids);
     claude
         .into_iter()
-        .filter_map(|(iid, alias)| usage.get(&iid).and_then(|u| u.headroom_score()).map(|used| (alias, used)))
+        .filter_map(|(iid, alias)| scores.get(&iid).map(|used| (alias, *used)))
         .filter(|(_, used)| *used < 90.0)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(alias, used)| (alias, (100.0 - used).round() as i64))

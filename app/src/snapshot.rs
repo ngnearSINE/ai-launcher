@@ -64,6 +64,8 @@ pub struct InstanceView {
     pub profile_dir: Option<String>,
     pub profile_exists: bool,
     pub usage: Option<UsageEntry>,
+    /// Organisations shown by default (see `usage::shown_orgs`), in report order.
+    pub shown_orgs: Vec<String>,
     pub app_id: String,
     /// Separation was turned off but this app can only rejoin its group after a restart.
     pub taskbar_needs_restart: bool,
@@ -124,6 +126,7 @@ pub fn build(core: &Core) -> Snapshot {
                 profile_exists: dir.as_ref().map(|d| d.exists()).unwrap_or(false),
                 profile_dir: dir.map(|d| d.display().to_string()),
                 usage: usage.get(&inst.id).cloned(),
+                shown_orgs: crate::usage::shown_orgs(&data.instances, &usage, &inst.id),
                 app_id: format!("AiLauncher.{}", inst.id),
                 taskbar_needs_restart: restart.contains(&inst.id),
                 instance: inst.clone(),

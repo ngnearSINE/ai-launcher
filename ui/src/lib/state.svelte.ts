@@ -78,8 +78,9 @@ export function headroom(inst: Instance): number | null {
 
 export function visibleOrgs(inst: Instance) {
   const orgs = inst.usage?.report?.orgs ?? []
-  const pick = inst.advanced.usageOrgs
-  return pick.length ? orgs.filter((o) => pick.includes(o.orgUuid)) : orgs
+  const shown = inst.shownOrgs ?? []
+  const list = shown.length ? orgs.filter((o) => shown.includes(o.orgUuid)) : orgs
+  return list.length ? list : orgs
 }
 
 /** Every instance the user can see (hidden apps and undoable deletes left out), in the

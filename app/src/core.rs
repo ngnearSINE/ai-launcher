@@ -287,10 +287,9 @@ impl Core {
                 .map(|i| i.id.clone())
                 .collect()
         };
-        let usage = self.usage.lock();
-        let score = |id: &String| -> f64 { usage.get(id).and_then(|u| u.headroom_score()).unwrap_or(50.0) };
+        let scores = crate::usage::scores(self, &candidates);
+        let score = |id: &String| -> f64 { scores.get(id).copied().unwrap_or(50.0) };
         let best = candidates.iter().min_by(|a, b| score(a).total_cmp(&score(b))).cloned().ok_or("no-claude")?;
-        drop(usage);
         self.launch(&best)?;
         Ok(best)
     }

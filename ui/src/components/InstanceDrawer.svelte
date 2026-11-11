@@ -142,7 +142,7 @@
             <Segmented size="sm" value={inst.advanced.usageEnabled} options={tri} onchange={(v) => patchAdv({ usageEnabled: v })} />
           </Row>
           {#if orgs.length > 1}
-            <Row label={t('표시할 조직')} desc={t('고르지 않으면 모두 보여요')} stack>
+            <Row label={t('표시할 조직')} desc={t('고르지 않으면 같은 계정의 다른 인스턴스가 보여 주는 조직은 빼고 보여요')} stack>
               <div class="orgs">
                 {#each orgs as o (o.orgUuid)}
                   <label class="chk">
@@ -158,6 +158,7 @@
                       }}
                     />
                     {o.orgName} <span class="faint">{o.plan}</span>
+                    {#if !inst.advanced.usageOrgs.length && inst.shownOrgs.includes(o.orgUuid)}<span class="auto">{t('자동')}</span>{/if}
                   </label>
                 {/each}
               </div>
@@ -264,6 +265,13 @@
     align-items: center;
     gap: 8px;
     font-size: var(--fs-13);
+  }
+  .auto {
+    padding: 1px 6px;
+    border-radius: var(--r-pill);
+    background: var(--s2);
+    color: var(--fg-3);
+    font-size: var(--fs-12);
   }
   .note {
     display: flex;

@@ -191,6 +191,9 @@ export interface Instance {
   profileDir: string | null
   profileExists: boolean
   usage: UsageEntry | null
+  /** Organisations shown by default: the instance's own pick, else the ones no other instance
+   *  signed in to the same account already stands for (decided by the launcher). */
+  shownOrgs: string[]
   appId: string
   taskbarNeedsRestart: boolean
 }

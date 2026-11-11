@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "ai-launcher"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2218,7 +2218,7 @@ dependencies = [
 
 [[package]]
 name = "launcher-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "launcher-platform"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "image",
  "log",
@@ -2243,7 +2243,7 @@ dependencies = [
 
 [[package]]
 name = "launcher-usage"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "aes",
  "aes-gcm",

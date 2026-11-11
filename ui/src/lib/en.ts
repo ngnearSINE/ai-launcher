@@ -34,7 +34,9 @@ export const en: Record<string, string> = {
   '계정 분리 없음': 'No account isolation',
   '계정 분리 지원': 'Account isolation',
   고급: 'Advanced',
-  '고르지 않으면 모두 보여요': 'Shows all when none is selected',
+  '고르지 않으면 같은 계정의 다른 인스턴스가 보여 주는 조직은 빼고 보여요':
+    'With none selected, organisations another instance of the same account already shows are left out',
+  '자동': 'Auto',
   '고정 버튼을 누르면 런처가 그 인스턴스 폴더로 정확히 띄워요. 끄면 앱 기본 실행(기본 프로필)이 열려요.':
     'A pinned button starts that exact instance through the launcher. Off opens the app normally (default profile).',
   '고정 아이콘은 런처로 실행': 'Pinned icon launches through the launcher',

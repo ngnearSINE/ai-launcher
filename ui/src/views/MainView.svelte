@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Main window shell: title bar, instance sidebar, and one content pane (overview, an
-  // instance, or settings). Every keyboard shortcut is resolved here through lib/keymap.
+  // Main window shell: title bar, the page rail, and the page. The window is the launcher's
+  // settings; its first page, the instances, has the instance sidebar and one content pane
+  // (overview or an instance). Every keyboard shortcut is resolved here through lib/keymap.
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { onMount } from 'svelte'
   import { api } from '../lib/api'
@@ -9,11 +10,12 @@
   import { t } from '../lib/i18n.svelte'
   import { matches, typing } from '../lib/keymap.svelte'
   import { sidebarOrder } from '../lib/sidebar.svelte'
-  import { dialogs, instanceById, run, ui } from '../lib/state.svelte'
+  import { dialogs, goPage, instanceById, run, ui } from '../lib/state.svelte'
   import AddAppDialog from '../components/AddAppDialog.svelte'
   import CommandPalette from '../components/CommandPalette.svelte'
   import Icon from '../components/Icon.svelte'
   import InstanceDrawer from '../components/InstanceDrawer.svelte'
+  import NavRail from '../components/NavRail.svelte'
   import NewInstanceDialog from '../components/NewInstanceDialog.svelte'
   import Settings from '../components/Settings.svelte'
   import ShortcutHelp from '../components/ShortcutHelp.svelte'
@@ -24,6 +26,7 @@
   const win = getCurrentWindow()
   const selected = $derived(instanceById(ui.selected))
   const rail = $derived(ui.railPinned || ui.narrow)
+  const home = $derived(ui.page === 'instances')
   const update = $derived(ui.snap?.update ?? { status: 'idle' as const })
 
   function measure() {
@@ -49,7 +52,7 @@
     if (!order.length) return
     const i = order.findIndex((x) => x.id === ui.selected)
     const next = order[i < 0 ? (d > 0 ? 0 : order.length - 1) : (i + d + order.length) % order.length]
-    ui.view = 'home'
+    goPage('instances')
     ui.selected = next.id
     queueMicrotask(() => document.querySelector(`[data-sort-id="${next.id}"]`)?.scrollIntoView({ block: 'nearest' }))
   }
@@ -78,10 +81,10 @@
       return
     }
     if (act('newInstance')) return run1(() => newInstance())
-    if (act('settings')) return run1(() => (ui.view = ui.view === 'settings' ? 'home' : 'settings'))
+    if (act('settings')) return run1(() => goPage(home ? ui.lastSettings : 'instances'))
     if (act('sidebar')) return run1(toggleRail)
     if (act('theme')) return run1(cycleTheme)
-    if (act('overview')) return run1(() => ((ui.view = 'home'), (ui.selected = null)))
+    if (act('overview')) return run1(() => (goPage('instances'), (ui.selected = null)))
     if (act('next')) return run1(() => step(1))
     if (act('prev')) return run1(() => step(-1))
     if (act('pin') && sel) return run1(() => toggleFavorite(sel))
@@ -92,11 +95,11 @@
       return
     }
     if (e.key === 'Escape') {
-      if (ui.view === 'settings') return run1(() => (ui.view = 'home'))
+      if (!home) return run1(() => goPage('instances'))
       if (ui.selected && !ui.drawer) return run1(() => (ui.selected = null))
       return
     }
-    if (ui.view !== 'home') return
+    if (!home) return
     if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.altKey && !e.ctrlKey) return run1(() => step(e.key === 'ArrowDown' ? 1 : -1))
     if (!sel) return
     // Enter on a focused button belongs to the button.
@@ -112,13 +115,13 @@
 
 <div class="shell">
   <header class="titlebar" data-tauri-drag-region>
-    <div class="brand" data-tauri-drag-region style:width={ui.view === 'settings' ? 'auto' : rail ? '60px' : 'var(--sidebar-w)'}>
-      {#if ui.view !== 'settings'}
+    <div class="brand" data-tauri-drag-region>
+      <img src="/icon.png" alt="" /><span data-tauri-drag-region>{t('AI 런처')}</span>
+      {#if home}
         <button class="icon-btn sm" title={t('사이드바 접기·펴기') + ' (Ctrl+B)'} aria-label={t('사이드바 접기·펴기')} onclick={toggleRail} disabled={ui.narrow}>
           <Icon name="sidebar" size={16} />
         </button>
       {/if}
-      {#if !rail || ui.view === 'settings'}<img src="/icon.png" alt="" /><span data-tauri-drag-region>{t('AI 런처')}</span>{/if}
     </div>
     <div class="mid" data-tauri-drag-region></div>
     <div class="right" data-tauri-drag-region>
@@ -140,17 +143,20 @@
   </header>
 
   <div class="body">
-    {#if ui.view === 'settings'}
-      <main class="pane settings-wrap"><Settings /></main>
+    <NavRail />
+    {#if home}
+      <div class="page">
+        <Sidebar {rail} />
+        <main class="pane">
+          {#if selected}
+            {#key selected.id}<InstanceDetail inst={selected} />{/key}
+          {:else}
+            <Overview />
+          {/if}
+        </main>
+      </div>
     {:else}
-      <Sidebar {rail} />
-      <main class="pane">
-        {#if selected}
-          {#key selected.id}<InstanceDetail inst={selected} />{/key}
-        {:else}
-          <Overview />
-        {/if}
-      </main>
+      <main class="page pane settings-wrap"><Settings /></main>
     {/if}
   </div>
 </div>
@@ -179,16 +185,21 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 0 8px 0 10px;
+    padding: 0 8px 0 0;
     font-weight: 650;
     font-size: var(--fs-13);
     letter-spacing: -0.01em;
-    transition: width var(--dur) var(--ease);
   }
+  /* The app icon sits over the rail's centre line. */
   .brand img {
     width: 18px;
     height: 18px;
+    margin-left: 29px;
+    margin-right: 4px;
     pointer-events: none;
+  }
+  .brand .icon-btn {
+    margin-left: 8px;
   }
   .mid {
     flex: 1;
@@ -272,6 +283,11 @@
     min-height: 0;
     display: flex;
   }
+  .page {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+  }
   /* The content pane is one step up from the window backdrop, with a soft top-left corner. */
   .pane {
     flex: 1;
@@ -284,7 +300,5 @@
   }
   .settings-wrap {
     overflow: hidden;
-    border-left: 0;
-    border-top-left-radius: 0;
   }
 </style>

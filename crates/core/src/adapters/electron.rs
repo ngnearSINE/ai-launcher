@@ -157,11 +157,35 @@ impl AppAdapter for ElectronAdapter {
         data_dir_matcher(&[name.as_str(), stem.as_str()], instance, ctx.env)
     }
 
+    /// Only the detected Cursor and Grok Bot installs; an app added by path is not assumed to
+    /// keep its sign-in where they do.
+    fn usage(&self, install: &Installation) -> Option<UsageKind> {
+        match install.id.as_str() {
+            "electron:cursor" => Some(UsageKind::Cursor),
+            "electron:grok-bot" => Some(UsageKind::GrokBot),
+            _ => None,
+        }
+    }
+
     fn brand(&self, install: &Installation) -> Brand {
         Brand {
             color: opt_str(install, "color").unwrap_or("#8E8E93").into(),
             letter: install.name.chars().next().unwrap_or('A').to_uppercase().to_string(),
             logo: opt_str(install, "logo").unwrap_or("generic").into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn usage_only_for_detected_cursor_and_grok_bot() {
+        let usage = |id: &str| ElectronAdapter.usage(&electron_install(id.into(), "x", PathBuf::from("x.exe"), "x", "generic", "#000"));
+        assert_eq!(usage("electron:cursor"), Some(UsageKind::Cursor));
+        assert_eq!(usage("electron:grok-bot"), Some(UsageKind::GrokBot));
+        assert_eq!(usage("electron:poe"), None);
+        assert_eq!(usage("electron:0f3c9a"), None);
     }
 }

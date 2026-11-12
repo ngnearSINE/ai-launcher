@@ -12,7 +12,7 @@
   import { createSortable, mergeOrder } from '../lib/sortable.svelte'
   import { dialogs, installationOf, run, settings, ui } from '../lib/state.svelte'
   import type { Instance, Settings as S } from '../lib/types'
-  import { isLaunching, levelOf, mainOrg, needsText, shortLeft, statusOf, windowsOf } from '../lib/usage'
+  import { isLaunching, levelOf, longLabel, mainOrg, needsText, shortLeft, statusOf, windowsOf } from '../lib/usage'
   import Icon from './Icon.svelte'
   import StatusBadge from './StatusBadge.svelte'
 
@@ -35,7 +35,6 @@
   const flipMs = $derived(s.reduceMotion ? 0 : 180)
 
   function select(inst: Instance) {
-    ui.view = 'home'
     ui.selected = inst.id
   }
   function set<K extends keyof S>(key: K, value: S[K]) {
@@ -54,7 +53,7 @@
     <button class="nav-row" onclick={() => newInstance()} title={rail ? t('새 인스턴스') : undefined}>
       <Icon name="plus" size={16} />{#if !rail}<span>{t('새 인스턴스')}</span><span class="keys">{#each caps(keysOf('newInstance')) as c, k (k)}<span class="kbd">{c}</span>{/each}</span>{/if}
     </button>
-    <button class="nav-row" class:on={ui.view === 'home' && !ui.selected} onclick={() => ((ui.view = 'home'), (ui.selected = null))} title={rail ? t('개요') : undefined}>
+    <button class="nav-row" class:on={!ui.selected} onclick={() => (ui.selected = null)} title={rail ? t('개요') : undefined}>
       <Icon name="home" size={16} />{#if !rail}<span>{t('개요')}</span>{/if}
     </button>
   </nav>
@@ -77,7 +76,7 @@
           {@const st = statusOf(inst, s)}
           <div
             class="row"
-            class:on={ui.view === 'home' && ui.selected === inst.id}
+            class:on={ui.selected === inst.id}
             class:missing={!installationOf(inst)?.present}
             class:sort-placeholder={sorter.st.dragging === inst.id}
             data-sort-id={inst.id}
@@ -97,7 +96,8 @@
               <span class="txt">
                 <span class="alias truncate">{inst.alias}</span>
                 {#if s.sidebarShowAccount}
-                  <span class="acct truncate">{inst.usage?.report?.email || installationOf(inst)?.name || ''}</span>
+                  {@const acct = inst.usage?.report?.email || installationOf(inst)?.name || ''}
+                  {#if acct && acct !== inst.alias}<span class="acct truncate">{acct}</span>{/if}
                 {/if}
               </span>
               <span class="trail">
@@ -110,7 +110,7 @@
                 {:else if (s.sidebarShow5h && w.w5) || (s.sidebarShowWeekly && w.ww)}
                   <span class="uses num">
                     {#if s.sidebarShow5h && w.w5}<span class="u {levelOf(w.w5, s)}" title={t('5시간')}><i>5h</i>{Math.round(w.w5.shown)}</span>{/if}
-                    {#if s.sidebarShowWeekly && w.ww}<span class="u {levelOf(w.ww, s)}" title={t('주간')}><i>{t('주')}</i>{Math.round(w.ww.shown)}</span>{/if}
+                    {#if s.sidebarShowWeekly && w.ww}<span class="u {levelOf(w.ww, s)}" title={longLabel(w.ww.q)}><i>{longLabel(w.ww.q, true)}</i>{Math.round(w.ww.shown)}</span>{/if}
                   </span>
                 {/if}
               </span>
@@ -147,7 +147,7 @@
   <footer class="foot">
     {#if accounts.length && !rail}
       <!-- Quiet usage summary: least-left per account; opens the overview. -->
-      <button class="usage" onclick={() => ((ui.view = 'home'), (ui.selected = null))} title={t('계정별 사용량 보기')}>
+      <button class="usage" onclick={() => (ui.selected = null)} title={t('계정별 사용량 보기')}>
         {#each accounts.slice(0, 4) as a (a.id)}
           {@const u = shortLeft(a, s)}
           <span class="acc">
@@ -162,7 +162,6 @@
     <div class="tools">
       <button class="icon-btn sm display-btn" class:active={displayOpen} title={t('표시')} aria-label={t('표시')} onclick={() => (displayOpen = !displayOpen)}><Icon name="display" size={16} /></button>
       <button class="icon-btn sm" title={t('단축키') + ' (Shift+?)'} aria-label={t('단축키')} onclick={() => (ui.help = true)}><Icon name="help" size={16} /></button>
-      <button class="icon-btn sm" class:active={ui.view === 'settings'} title={t('설정') + ' (Ctrl+,)'} aria-label={t('설정')} onclick={() => (ui.view = 'settings')}><Icon name="settings" size={16} /></button>
     </div>
   </footer>
 

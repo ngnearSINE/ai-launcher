@@ -3,7 +3,8 @@
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { api } from './api'
 import { t } from './i18n.svelte'
-import { confirmBox, dialogs, dismissToast, installationOf, openMenu, run, settings, toast, ui, type MenuItem } from './state.svelte'
+import { pageOf } from './pages'
+import { confirmBox, dialogs, dismissToast, goPage, installationOf, openMenu, run, settings, toast, ui, type MenuItem } from './state.svelte'
 import type { Instance } from './types'
 
 export async function launch(inst: Instance) {
@@ -108,7 +109,7 @@ export function edit(inst: Instance) {
 /** Shows the instance in the main pane (from the quick panel / float too). */
 export function reveal(inst: Instance) {
   inMain('select', inst.id, () => {
-    ui.view = 'home'
+    goPage('instances')
     ui.selected = inst.id
   })
 }
@@ -184,11 +185,9 @@ export function newInstance(installationId?: string) {
   inMain('new', installationId ?? null, () => (dialogs.newInstance = installationId ?? true))
 }
 
-export function openSettings(tab = 'general') {
-  inMain('settings', tab, () => {
-    ui.view = 'settings'
-    ui.settingsTab = tab
-  })
+/** Opens the main window at a settings page (any window may ask). */
+export function openSettings(page = 'general') {
+  inMain('settings', page, () => goPage(pageOf(page)))
 }
 
 export function launchBestClaude() {
@@ -202,13 +201,10 @@ export function listenUiActions() {
     if (kind === 'edit') ui.drawer = String(payload)
     if (kind === 'new') dialogs.newInstance = (payload as string | null) ?? true
     if (kind === 'select') {
-      ui.view = 'home'
+      goPage('instances')
       ui.selected = String(payload)
     }
-    if (kind === 'settings') {
-      ui.view = 'settings'
-      ui.settingsTab = String(payload ?? 'general')
-    }
+    if (kind === 'settings') goPage(pageOf(payload as string))
     if (kind === 'help') ui.help = true
   })
 }

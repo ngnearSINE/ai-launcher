@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum QuotaKind {
     FiveHour,
@@ -11,9 +11,11 @@ pub enum QuotaKind {
     Scoped,
     /// Pay-as-you-go credits on top of the plan.
     Credits,
+    /// A plan allowance per billing cycle (Cursor); `resets_at` is the cycle end.
+    Monthly,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Quota {
     pub kind: QuotaKind,
@@ -28,14 +30,14 @@ pub struct Quota {
 }
 
 /// Share of the weekly usage per surface (Claude Code, chats, Cowork…).
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Share {
     pub label: String,
     pub percent: f64,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OrgUsage {
     pub org_uuid: String,
@@ -51,7 +53,7 @@ pub struct OrgUsage {
     pub unknown_fields: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageReport {
     pub account_uuid: String,

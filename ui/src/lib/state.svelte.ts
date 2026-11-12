@@ -2,16 +2,17 @@ import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { api } from './api'
 import { locale, resolveLang, t } from './i18n.svelte'
+import { pageOf, type PageId } from './pages'
 import type { Installation, Instance, Settings, Snapshot } from './types'
-
-export type View = 'home' | 'settings'
 
 interface UiState {
   snap: Snapshot | null
   icons: Record<string, string>
   label: string
-  view: View
-  settingsTab: string
+  /** The page the main window shows (rail order in lib/pages). */
+  page: PageId
+  /** The settings page Ctrl+, goes back to from the instances. */
+  lastSettings: PageId
   /** Instance whose edit panel is open. */
   drawer: string | null
   /** Instance shown in the main pane; null = overview. */
@@ -36,8 +37,8 @@ export const ui: UiState = $state({
   snap: null,
   icons: {},
   label: 'main',
-  view: 'home',
-  settingsTab: 'general',
+  page: 'instances',
+  lastSettings: 'float',
   drawer: null,
   selected: null,
   search: '',
@@ -85,6 +86,12 @@ export function visibleOrgs(inst: Instance) {
 
 /** Every instance the user can see (hidden apps and undoable deletes left out), in the
  *  chosen sort order. The sidebar, the floating launcher and the palette all start here. */
+/** Shows a page of the main window; settings pages are remembered for Ctrl+,. */
+export function goPage(page: PageId) {
+  ui.page = page
+  if (page !== 'instances') ui.lastSettings = page
+}
+
 export function visibleInstances(opts: { forQuick?: boolean; forFloat?: boolean } = {}): Instance[] {
   const s = ui.snap
   if (!s) return []
@@ -92,6 +99,7 @@ export function visibleInstances(opts: { forQuick?: boolean; forFloat?: boolean 
     if (ui.pendingDelete.includes(i.id)) return false
     if (opts.forQuick && i.advanced.hiddenInQuick) return false
     if (opts.forFloat && i.advanced.hiddenInFloat) return false
+    if (opts.forFloat && s.settings.floatRunningOnly && !i.running && !ui.launching[i.id]) return false
     return !installationOf(i)?.hidden
   })
   const sort = s.settings.sort
@@ -270,7 +278,7 @@ export async function boot() {
     if (iconsStale) loadIcons()
   })
   await listen<string>('navigate', (e) => {
-    if (e.payload === 'settings') ui.view = 'settings'
+    if (e.payload) goPage(pageOf(e.payload))
   })
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme)
   // Countdowns are in minutes, so a coarse clock is enough (and keeps every window idle).

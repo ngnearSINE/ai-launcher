@@ -5,7 +5,7 @@
   import { t } from '../lib/i18n.svelte'
   import { installationOf, instanceById, run, ui } from '../lib/state.svelte'
   import type { Instance, InstanceAdvanced, LaunchOptions, Tristate } from '../lib/types'
-  import Avatar from './Avatar.svelte'
+  import StatusBadge from './StatusBadge.svelte'
   import Icon from './Icon.svelte'
   import { ColorPick, Row, Segmented, Switch } from './controls'
 
@@ -59,7 +59,7 @@
   <div class="scrim-lite" role="presentation" onmousedown={() => (ui.drawer = null)}></div>
   <aside class="drawer" aria-label={inst.alias}>
     <header>
-      <Avatar {inst} size={44} />
+      <StatusBadge {inst} size={44} />
       <div class="ttl">
         <div class="name truncate">{inst.alias}</div>
         <div class="muted small truncate">{install?.name}{inst.running ? ` · ${t('실행 중')}` : ''}</div>

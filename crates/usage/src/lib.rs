@@ -6,6 +6,7 @@
 
 pub mod claude;
 mod crypto;
+pub mod cursor;
 pub mod model;
 
 pub use model::*;

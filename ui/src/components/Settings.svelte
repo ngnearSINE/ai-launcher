@@ -4,11 +4,13 @@
   import { ago } from '../lib/format'
   import { api } from '../lib/api'
   import { t } from '../lib/i18n.svelte'
-  import { confirmBox, dialogs, run, settings, ui } from '../lib/state.svelte'
+  import { confirmBox, dialogs, run, settings, ui, visibleInstances } from '../lib/state.svelte'
   import type { Settings as S } from '../lib/types'
   import Icon from './Icon.svelte'
   import { ColorPick, HotkeyInput, Row, Segmented, Switch } from './controls'
+  import StatusBadge from './StatusBadge.svelte'
   import ThemePicker from './ThemePicker.svelte'
+  import { setHiddenInFloat } from '../lib/actions'
   import { BINDINGS, caps, keysOf, SECTIONS } from '../lib/keymap.svelte'
 
   const s = $derived(settings())
@@ -43,17 +45,8 @@
     run(api.updateSettings({ [key]: value } as Partial<S>))
   }
 
-  const tabs = $derived([
-    { id: 'general', icon: 'sliders', label: t('일반') },
-    { id: 'appearance', icon: 'palette', label: t('모양') },
-    { id: 'launcher', icon: 'float', label: t('런처') },
-    { id: 'shortcuts', icon: 'keyboard', label: t('단축키') },
-    { id: 'taskbar', icon: 'taskbar', label: t('작업 표시줄') },
-    { id: 'usage', icon: 'chart', label: t('사용량') },
-    { id: 'apps', icon: 'layers', label: t('앱 관리') },
-    { id: 'data', icon: 'database', label: t('데이터') },
-    { id: 'about', icon: 'info', label: t('정보') },
-  ])
+  // Every instance the strip could show (hidden ones too, so they can be put back).
+  const floatCandidates = $derived(visibleInstances())
   const installs = $derived(ui.snap?.installations ?? [])
   const countOf = (id: string) => (ui.snap?.instances ?? []).filter((i) => i.installationId === id).length
 
@@ -82,18 +75,8 @@
 </script>
 
 <div class="settings">
-  <nav>
-    <button class="back" onclick={() => (ui.view = 'home')}><Icon name="chevron" size={14} /> {t('돌아가기')}</button>
-    {#each tabs as tb (tb.id)}
-      <button class="tab" class:on={ui.settingsTab === tb.id} onclick={() => (ui.settingsTab = tb.id)}>
-        <Icon name={tb.icon} size={15} />
-        {tb.label}
-      </button>
-    {/each}
-  </nav>
-
   <section>
-    {#if ui.settingsTab === 'general'}
+    {#if ui.page === 'general'}
       <h1>{t('일반')}</h1>
       <Row label={t('언어')}>
         <Segmented value={s.language} onchange={(v) => set('language', v)} options={[{ value: 'system', label: t('시스템') }, { value: 'ko', label: '한국어' }, { value: 'en', label: 'English' }]} />
@@ -110,7 +93,14 @@
       <Row label={t('강제 종료 전에 묻기')}>
         <Switch checked={s.confirmQuitInstance} onchange={(v) => set('confirmQuitInstance', v)} />
       </Row>
-    {:else if ui.settingsTab === 'appearance'}
+      <h2>{t('트레이')}</h2>
+      <Row label={t('트레이 아이콘 클릭')}>
+        <Segmented value={s.trayLeftClick} onchange={(v) => set('trayLeftClick', v)} options={[{ value: 'popup', label: t('빠른 실행') }, { value: 'main', label: t('관리 창') }]} />
+      </Row>
+      <Row label={t('트레이 아이콘 더블클릭')} desc={t('더블클릭을 쓰면 한 번 클릭은 더블클릭 간격만큼 기다렸다 동작해요')}>
+        <Segmented value={s.trayDoubleClick} onchange={(v) => set('trayDoubleClick', v)} options={[{ value: 'main', label: t('관리 창') }, { value: 'quick', label: t('빠른 실행') }, { value: 'none', label: t('사용 안 함') }]} />
+      </Row>
+    {:else if ui.page === 'appearance'}
       <h1>{t('모양')}</h1>
       <Row label={t('테마')} desc={t('Ctrl+Alt+T로 차례로 바꿀 수 있어요')} stack>
         <ThemePicker value={s.theme} accent={s.accent} onchange={(v) => set('theme', v)} />
@@ -142,20 +132,38 @@
       <Row label={t('움직임 줄이기')}>
         <Switch checked={s.reduceMotion} onchange={(v) => set('reduceMotion', v)} />
       </Row>
-    {:else if ui.settingsTab === 'launcher'}
-      <h1>{t('런처')}</h1>
-      <h2>{t('트레이')}</h2>
-      <Row label={t('트레이 아이콘 클릭')}>
-        <Segmented value={s.trayLeftClick} onchange={(v) => set('trayLeftClick', v)} options={[{ value: 'popup', label: t('빠른 실행') }, { value: 'main', label: t('관리 창') }]} />
-      </Row>
-      <Row label={t('트레이 아이콘 더블클릭')} desc={t('더블클릭을 쓰면 한 번 클릭은 더블클릭 간격만큼 기다렸다 동작해요')}>
-        <Segmented value={s.trayDoubleClick} onchange={(v) => set('trayDoubleClick', v)} options={[{ value: 'main', label: t('관리 창') }, { value: 'quick', label: t('빠른 실행') }, { value: 'none', label: t('사용 안 함') }]} />
-      </Row>
-      <h2>{t('플로팅 바')}</h2>
+    {:else if ui.page === 'float'}
+      <h1>{t('플로팅 바')}</h1>
       <div class="tip">
         <Icon name="float" size={14} />
         <span>{t('런처가 켜져 있는 동안 늘 떠 있어요. 긴 옆면을 끌면 아이콘 크기만, 양 끝을 끌면 보이는 칸 수만 바뀌고, 모서리는 둘 다 바꿔요. 넘치는 아이콘은 휠로 넘겨요. 작업 표시줄에 끌어다 놓으면 가로로 붙어요.')}</span>
       </div>
+      <h2>{t('놓기')}</h2>
+      {#if s.floatDocked}
+        <Row label={t('작업 표시줄에 붙어 있어요')} desc={t('손잡이를 좌우로 끌면 옮겨지고 아이콘·위젯·알림 영역에 붙어요. 작업 표시줄 밖으로 끌어내면 놓을 자리가 미리 보이고, 놓으면 떨어져요')}>
+          <button class="btn sm" onclick={() => api.floatUndock()}>{t('떼기')}</button>
+        </Row>
+        <Row label={t('작업 표시줄에서 보이는 칸')} desc={s.floatDockSlots ? t('{n}칸 · 양 끝을 끌어도 바뀌어요', { n: s.floatDockSlots }) : t('자동 · 양 끝을 끌어도 바뀌어요')}>
+          <button class="btn sm" disabled={!s.floatDockSlots} onclick={() => set('floatDockSlots', 0)}>{t('자동')}</button>
+        </Row>
+      {/if}
+      <Row label={t('방향')} desc={s.floatDocked ? t('작업 표시줄에서는 늘 가로예요. 떼면 이 방향으로 놓여요') : t('플로팅 바 손잡이를 우클릭해도 바꿀 수 있어요')}>
+        <Segmented value={s.floatOrientation} onchange={(v) => set('floatOrientation', v)} options={[{ value: 'vertical', label: t('세로') }, { value: 'horizontal', label: t('가로') }]} />
+      </Row>
+      <Row label={t('크기')} desc={`${Math.round((s.floatSize / 44) * 100)}% · ${t('모서리를 끌어도 바뀌어요')}`}>
+        <input type="range" min="28" max="220" value={s.floatSize} onchange={(e) => set('floatSize', +(e.target as HTMLInputElement).value)} />
+      </Row>
+      <Row label={t('보이는 칸')} desc={s.floatSlots ? t('{n}칸 · 위·아래 끝을 끌어도 바뀌어요', { n: s.floatSlots }) : t('모두 · 위·아래 끝을 끌어도 바뀌어요')}>
+        <button class="btn sm" disabled={!s.floatSlots} onclick={() => set('floatSlots', 0)}>{t('모두 보이기')}</button>
+      </Row>
+      <Row label={t('항상 위에')}>
+        <Switch checked={s.floatAlwaysOnTop} onchange={(v) => set('floatAlwaysOnTop', v)} />
+      </Row>
+      <Row label={t('위치 초기화')}>
+        <button class="btn sm" onclick={() => set('floatPosition', null)}>{t('초기화')}</button>
+      </Row>
+
+      <h2>{t('모양')}</h2>
       <Row label={t('사용량 고리')} desc={t('「둘 다」는 바깥 고리가 주간, 안쪽 고리가 5시간이에요. 흰 눈금은 고르게 썼을 때의 위치예요.')} stack>
         <Segmented
           value={s.floatRing}
@@ -169,29 +177,38 @@
           ]}
         />
       </Row>
-      {#if s.floatDocked}
-        <Row label={t('작업 표시줄에 붙어 있어요')} desc={t('손잡이를 좌우로 끌면 옮겨지고 아이콘·위젯·알림 영역에 붙어요. 작업 표시줄 밖으로 끌어내면 놓을 자리가 미리 보이고, 놓으면 떨어져요')}>
-          <button class="btn sm" onclick={() => api.floatUndock()}>{t('떼기')}</button>
-        </Row>
-        <Row label={t('작업 표시줄에서 보이는 칸')} desc={s.floatDockSlots ? t('{n}칸 · 양 끝을 끌어도 바뀌어요', { n: s.floatDockSlots }) : t('자동 · 양 끝을 끌어도 바뀌어요')}>
-          <button class="btn sm" disabled={!s.floatDockSlots} onclick={() => set('floatDockSlots', 0)}>{t('자동')}</button>
-        </Row>
-      {/if}
-      <Row label={t('방향')} desc={t('플로팅 바 손잡이를 우클릭해도 바꿀 수 있어요')}>
-        <Segmented value={s.floatOrientation} onchange={(v) => set('floatOrientation', v)} options={[{ value: 'vertical', label: t('세로') }, { value: 'horizontal', label: t('가로') }]} />
+      <Row label={t('색 점')} desc={t('아이콘 구석에 인스턴스 색 점을 그려요. 점 둘레 고리는 실행 중(돌면 시작하는 중), 노랑·빨강 고리는 사용량이 빠듯하다는 뜻이에요')}>
+        <Switch checked={s.floatBadges} onchange={(v) => set('floatBadges', v)} />
       </Row>
-      <Row label={t('크기')} desc={`${Math.round((s.floatSize / 44) * 100)}% · ${t('모서리를 끌어도 바뀌어요')}`}>
-        <input type="range" min="28" max="220" value={s.floatSize} onchange={(e) => set('floatSize', +(e.target as HTMLInputElement).value)} />
-      </Row>
-      <Row label={t('보이는 칸')} desc={s.floatSlots ? t('{n}칸 · 위·아래 끝을 끌어도 바뀌어요', { n: s.floatSlots }) : t('모두 · 위·아래 끝을 끌어도 바뀌어요')}>
-        <button class="btn sm" disabled={!s.floatSlots} onclick={() => set('floatSlots', 0)}>{t('모두 보이기')}</button>
+      <Row label={t('실행 중이 아닌 아이콘 흐리게')}>
+        <Switch checked={s.floatDimIdle} onchange={(v) => set('floatDimIdle', v)} />
       </Row>
       <Row label={t('불투명도')} desc={`${s.floatOpacity}%`}>
         <input type="range" min="30" max="100" value={s.floatOpacity} onchange={(e) => set('floatOpacity', +(e.target as HTMLInputElement).value)} />
       </Row>
-      <Row label={t('항상 위에')}>
-        <Switch checked={s.floatAlwaysOnTop} onchange={(v) => set('floatAlwaysOnTop', v)} />
+      <Row label={t('상세 창 열기 단추')} desc={t('끄면 바가 그만큼 짧아져요. 손잡이 우클릭으로도 열 수 있어요')}>
+        <Switch checked={s.floatShowOpen} onchange={(v) => set('floatShowOpen', v)} />
       </Row>
+
+      <h2>{t('아이콘')}</h2>
+      <Row label={t('실행 중인 것만 보이기')} desc={t('켜 둔 앱만 바에 올려요')}>
+        <Switch checked={s.floatRunningOnly} onchange={(v) => set('floatRunningOnly', v)} />
+      </Row>
+      <Row label={t('마우스를 올리면 사용량 보기')} desc={t('계정과 5시간·주간 사용량, 초기화까지 남은 시간')}>
+        <Switch checked={s.floatTips} onchange={(v) => set('floatTips', v)} />
+      </Row>
+      <Row label={t('바에 보일 인스턴스')} desc={t('플로팅 바에서 아이콘을 우클릭해 숨겨도 돼요')} stack>
+        <div class="pick">
+          {#each floatCandidates as inst (inst.id)}
+            <label class="pick-row">
+              <StatusBadge {inst} size={22} badge={false} />
+              <span class="pick-name">{inst.alias}</span>
+              <Switch checked={!inst.advanced.hiddenInFloat} onchange={(v) => setHiddenInFloat(inst, !v)} />
+            </label>
+          {/each}
+        </div>
+      </Row>
+
       <h2>{t('마그넷')}</h2>
       <Row label={t('가장자리에 붙이기')} desc={t('끌어서 옮길 때 화면 가장자리에 착 붙어요')}>
         <Switch checked={s.floatSnapEdges} onchange={(v) => set('floatSnapEdges', v)} />
@@ -205,7 +222,7 @@
       <Row label={t('위치 초기화')}>
         <button class="btn sm" onclick={() => set('floatPosition', null)}>{t('초기화')}</button>
       </Row>
-    {:else if ui.settingsTab === 'shortcuts'}
+    {:else if ui.page === 'shortcuts'}
       <h1>{t('단축키')}</h1>
       <h2>{t('어디서든 (전역)')}</h2>
       <p class="lead">{t('런처 창이 숨어 있어도 동작해요. 다른 앱과 겹치면 켜지지 않을 수 있어요.')}</p>
@@ -240,7 +257,7 @@
           </Row>
         {/each}
       {/each}
-    {:else if ui.settingsTab === 'taskbar'}
+    {:else if ui.page === 'taskbar'}
       <h1>{t('작업 표시줄')}</h1>
       <p class="lead">{t('여기 설정은 모든 인스턴스의 기본값입니다. 인스턴스마다 편집 → 고급에서 따로 바꿀 수 있어요.')}</p>
       {#if ui.snap?.os !== 'windows'}<p class="lead warn">{t('작업 표시줄 분리는 Windows 기능이에요. Linux에서는 앱 메뉴 항목으로 고정하세요.')}</p>{/if}
@@ -263,7 +280,7 @@
         <Icon name="info" size={14} />
         <span>{t('고정하는 법: 인스턴스를 실행한 뒤 작업 표시줄에 생긴 버튼을 우클릭 → "작업 표시줄에 고정". 고정한 뒤에는 버튼 이름·아이콘을 바꿔도 Windows가 예전 것을 기억할 수 있어요.')}</span>
       </div>
-    {:else if ui.settingsTab === 'usage'}
+    {:else if ui.page === 'usage'}
       <h1>{t('사용량')}</h1>
       <p class="lead">{t('사용량은 각 인스턴스가 쓰는 프로필 폴더의 로그인으로만 조회해요. 다른 인스턴스나 CLI의 로그인을 섞어 쓰지 않습니다. 로그인 정보는 이 PC 안에서만 풀고 저장하지 않아요.')}</p>
       <Row label={t('사용량 조회')}>
@@ -274,6 +291,9 @@
       </Row>
       <Row label={t('숫자와 막대')} desc={t('남은 양을 보여 줄지 쓴 양을 보여 줄지 골라요')}>
         <Segmented value={s.usageValue} onchange={(v) => set('usageValue', v)} options={[{ value: 'left', label: t('남은 양') }, { value: 'used', label: t('쓴 양') }]} />
+      </Row>
+      <Row label={t('막대 색')} desc={t('「주의만 색」은 여유 있는 막대를 회색으로 두어 빠듯한 계정이 먼저 눈에 띄어요')}>
+        <Segmented value={s.usageBarTone} onchange={(v) => set('usageBarTone', v)} options={[{ value: 'calm', label: t('주의만 색') }, { value: 'accent', label: t('강조색') }]} />
       </Row>
       <Row label={t('페이스 눈금')} desc={t('기간 동안 고르게 썼다면 지금 있어야 할 위치를 흰 눈금으로 표시해요')}>
         <Switch checked={s.usageShowPace} onchange={(v) => set('usageShowPace', v)} />
@@ -297,7 +317,7 @@
       <Row label={t('지금 모두 새로고침')}>
         <button class="btn sm" onclick={() => run(api.refreshUsage())}><Icon name="refresh" size={13} /> {t('새로고침')}</button>
       </Row>
-    {:else if ui.settingsTab === 'apps'}
+    {:else if ui.page === 'apps'}
       <h1>{t('앱 관리')}</h1>
       <p class="lead">{t('기본 경로에 설치된 앱은 자동으로 찾아요. 다른 위치의 프로그램은 경로로 추가하세요.')}</p>
       <div class="bar">
@@ -330,7 +350,7 @@
           </div>
         {/each}
       </div>
-    {:else if ui.settingsTab === 'data'}
+    {:else if ui.page === 'data'}
       <h1>{t('데이터')}</h1>
       <Row label={t('삭제할 때 휴지통으로')} desc={t('끄면 프로필 폴더를 바로 지워요')}>
         <Switch checked={s.deleteMovesToTrash} onchange={(v) => set('deleteMovesToTrash', v)} />
@@ -412,68 +432,46 @@
 </div>
 
 <style>
+  /* The page is a flex row: take its full width so the scroll bar sits on the window's edge. */
   .settings {
-    display: grid;
-    grid-template-columns: 200px 1fr;
+    flex: 1;
+    min-width: 0;
     height: 100%;
     min-height: 0;
-  }
-  nav {
-    padding: 12px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    border-right: 1px solid var(--line);
-  }
-  .back {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    border: 0;
-    background: none;
-    color: var(--accent);
-    height: 30px;
-    padding: 0 8px;
-    margin-bottom: 8px;
-    font-size: var(--fs-13);
-  }
-  .back :global(svg) {
-    transform: rotate(180deg);
-  }
-  .tab {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 32px;
-    padding: 0 10px;
-    border: 0;
-    border-radius: var(--r-md);
-    background: transparent;
-    color: var(--text-2);
-    font-size: var(--fs-13);
-    text-align: left;
-  }
-  .tab:hover {
-    background: var(--surface-hover);
-    color: var(--text);
-  }
-  .tab.on {
-    background: var(--selected);
-    color: var(--text);
-    font-weight: 600;
+    overflow: auto;
   }
   .keys {
     display: flex;
     align-items: center;
     gap: 3px;
   }
-  .tab.on :global(svg) {
-    color: var(--accent);
-  }
   section {
-    overflow: auto;
-    padding: 20px 32px 40px;
+    padding: 20px 32px 48px;
     max-width: 760px;
+  }
+  .pick {
+    display: grid;
+    gap: 2px;
+    margin-top: 4px;
+  }
+  .pick-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
+    padding: 0 4px 0 8px;
+    border-radius: var(--r-md);
+  }
+  .pick-row:hover {
+    background: var(--surface-hover);
+  }
+  .pick-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-13);
   }
   h1 {
     font-size: var(--fs-22);

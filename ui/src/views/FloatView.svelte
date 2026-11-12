@@ -7,9 +7,9 @@
   import { popupNative } from '../lib/nativeMenu'
   import { run, settings, ui, visibleInstances } from '../lib/state.svelte'
   import { createSortable, mergeOrder } from '../lib/sortable.svelte'
-  import { levelOf, mainOrg, ringBox, ringWindows, windowsOf } from '../lib/usage'
+  import { levelOf, mainOrg, longLabel, ringBox, ringWindows, windowsOf } from '../lib/usage'
   import type { Instance } from '../lib/types'
-  import Avatar from '../components/Avatar.svelte'
+  import StatusBadge from '../components/StatusBadge.svelte'
   import Icon from '../components/Icon.svelte'
 
   // The floating strip: a handle to move it, the instance icons, and a button that opens the
@@ -35,7 +35,7 @@
   const PAD = $derived(docked ? 3 : 5)
   const BORDER = 1
   const HANDLE = 22
-  const FOOT = 32
+  const FOOT = $derived(s.floatShowOpen ? 32 : 0)
   const maxRings = $derived(s.floatRing === 'none' ? 0 : s.floatRing === 'both' ? 2 : 1)
   const cell = $derived(ringBox(ICON, maxRings) + 6)
   const shape = (edge: number) => ({ across: cell + 2 * (edge + BORDER), fixed: 2 * (edge + BORDER) + HANDLE + FOOT })
@@ -135,7 +135,7 @@
     const parts = [inst.alias]
     if (inst.usage?.report?.email) parts.push(inst.usage.report.email)
     if (w5) parts.push(`${t('5시간')} ${pct(w5.shown)} ${word}${w5.q.resetsAt ? ` · ${until(w5.q.resetsAt, ui.now)}` : ''}`)
-    if (ww) parts.push(`${t('주간')} ${pct(ww.shown)} ${word}${ww.q.resetsAt ? ` · ${until(ww.q.resetsAt, ui.now)}` : ''}`)
+    if (ww) parts.push(`${longLabel(ww.q)} ${pct(ww.shown)} ${word}${ww.q.resetsAt ? ` · ${until(ww.q.resetsAt, ui.now)}` : ''}`)
     if (inst.running) parts.push(t('실행 중'))
     return parts.join('\n')
   }
@@ -162,7 +162,7 @@
       ...(hidden.length
         ? [{ label: t('숨긴 아이콘 다시 표시 ({n})', { n: hidden.length }), action: () => hidden.forEach((i) => setHiddenInFloat(i, false)) }]
         : []),
-      { label: t('플로팅 설정…'), action: () => openSettings('launcher') },
+      { label: t('플로팅 바 설정…'), action: () => openSettings('float') },
       { sep: true },
       { label: t('AI Launcher 종료'), action: () => api.quitApp() },
     ])
@@ -211,16 +211,17 @@
           <button
             class="cell"
             class:on={inst.running}
+            class:dim={s.floatDimIdle && !inst.running}
             class:sort-placeholder={sorter.st.dragging === inst.id}
             data-sort-id={inst.id}
             animate:flip={{ duration: s.reduceMotion ? 0 : 200 }}
             onpointerdown={(e) => sorter.down(e, inst.id)}
             onclick={() => click(inst)}
             oncontextmenu={(e) => itemMenu(e, inst)}
-            title={tip(inst)}
+            title={s.floatTips ? tip(inst) : inst.alias}
           >
-            <Avatar {inst} size={ICON} rings={rings(inst)} />
-            <i class="run"></i>
+            <StatusBadge {inst} size={ICON} rings={rings(inst)} badge={s.floatBadges} />
+            {#if !s.floatBadges}<i class="run"></i>{/if}
           </button>
         {/each}
       </div>
@@ -236,11 +237,13 @@
     {/if}
   </div>
 
-  <div class="foot">
-    <button class="open" title={t('상세 창 열기') + hotkey} aria-label={t('상세 창 열기')} onclick={openMain}>
-      <Icon name="window" size={16} />
-    </button>
-  </div>
+  {#if s.floatShowOpen}
+    <div class="foot">
+      <button class="open" title={t('상세 창 열기') + hotkey} aria-label={t('상세 창 열기')} onclick={openMain}>
+        <Icon name="window" size={16} />
+      </button>
+    </div>
+  {/if}
 
   <!-- Corners: across = icon size, along = cells. Ends: cells only. Long sides: icon size only
        (the same cells, so the strip gets longer with them). Pointer-only affordances: the same
@@ -406,6 +409,13 @@
   }
   .cell.on .run {
     background: var(--run);
+  }
+  .cell.dim :global(.av) {
+    opacity: 0.45;
+    transition: opacity var(--dur) var(--ease);
+  }
+  .cell.dim:hover :global(.av) {
+    opacity: 1;
   }
 
   /* "N more this way": a small capsule riding on the faded end, nudging toward what is hidden. */

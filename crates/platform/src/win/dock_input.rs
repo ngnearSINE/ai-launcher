@@ -10,10 +10,11 @@
 //! menu and the wheel behave as anywhere else. Rules that keep other apps unaffected:
 //! - nothing outside the docked window's rectangle is touched (a press that started on it is
 //!   followed until its release, like a capture);
-//! - the left button is never swallowed: the system's button state stays true for everyone
-//!   (other docked widgets that poll it, Windows' own move loop when the strip is pulled out);
-//! - the right button and the wheel over the window are swallowed, so the taskbar underneath
-//!   does not also open its own menu.
+//! - over the window, buttons and the wheel are the window's alone: the taskbar underneath
+//!   never sees them. Otherwise the taskbar also takes the press, captures the mouse (its input
+//!   queue is shared with its child windows) and the web view loses its capture — dragging an
+//!   icon to reorder it was cancelled at once (2026-11-12). Since swallowed presses never reach
+//!   the system's button state, code following a press on the window asks [`primary_down`].
 
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
 
@@ -66,6 +67,16 @@ pub fn start(host: isize) {
         let _ = UnhookWindowsHookEx(hook);
         THREAD.store(0, Ordering::SeqCst);
     });
+}
+
+/// Whether the primary button is held: as the hook saw it while a window is docked (presses on
+/// it are kept from the system), else the system's own state.
+pub fn primary_down() -> bool {
+    if THREAD.load(Ordering::SeqCst) != 0 && HOST.load(Ordering::SeqCst) != 0 {
+        BUTTONS.load(Ordering::SeqCst) & MK_LBUTTON as isize != 0
+    } else {
+        super::dock::primary_button_down()
+    }
 }
 
 /// Stops forwarding (the window left the taskbar).
@@ -183,9 +194,8 @@ fn handle(msg: u32, info: &MSLLHOOKSTRUCT) -> Option<bool> {
                 CAPTURED.store(false, Ordering::SeqCst);
             }
             post(msg, held as usize, client_lparam(to, p));
-            // The left button stays with the system; the others are ours when pressed on the
-            // strip (a release is kept back only if its press was).
-            Some(bit != MK_LBUTTON as isize && ((down && inside) || (up && captured)))
+            // Pressed on the strip: the press and its release are the strip's alone.
+            Some((down && inside) || (up && captured))
         }
         _ => None,
     }

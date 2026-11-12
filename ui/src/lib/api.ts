@@ -44,8 +44,7 @@ export const api = {
   /** Starts resizing the floating strip from the cursor (see `magnet::begin_resize`). */
   floatResize: (dir: string) => invoke<void>('float_resize', { dir }),
   /** Docked strip's handle pressed: it follows the mouse along the taskbar, or out of it. */
-  floatDockDrag: () => invoke<void>('float_dock_drag'),
-  floatDockResize: (dir: string) => invoke<void>('float_dock_resize', { dir }),
+  floatGrab: () => invoke<void>('float_grab'),
   floatUndock: () => invoke<void>('float_undock'),
   fitFloat: (layout: {
     vertical: boolean; fixed: number; cell: number; across: number; total: number

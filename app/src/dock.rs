@@ -110,7 +110,6 @@ fn accent_rgb(s: &Settings) -> u32 {
 pub struct DockFit {
     pub k: f64,
     pub width: i32,
-    pub n: usize,
     /// Cells shown when the user has not chosen (`float_dock_slots` = 0).
     pub auto_n: usize,
     /// Most cells the user may ask for.
@@ -131,7 +130,7 @@ pub fn dock_fit(l: &FloatLayout, s: &Settings, sp: &TaskbarSpace) -> DockFit {
     let max_n = total.min(room(0.9)).max(auto_n);
     let n = if s.float_dock_slots == 0 { auto_n } else { (s.float_dock_slots as usize).clamp(1, max_n) };
     let width = (fixed_px + n as f64 * cell_px).round() as i32;
-    DockFit { k, width, n, auto_n, max_n, fixed_px, cell_px }
+    DockFit { k, width, auto_n, max_n, fixed_px, cell_px }
 }
 
 /// Landmarks of a taskbar: the last ones read (UI Automation takes ~50–100 ms, too slow for
@@ -333,7 +332,7 @@ pub fn dock_drag(app: &AppHandle, core: &Arc<Core>) {
         let pull = (PULL_OUT * scale_of(&sp)).round() as i32;
         let mut landing = Landing::Dock { taskbar: tb, anchor: DockAnchor::parse(&s.float_dock_anchor), x: x0, width };
         let mut shown_x = x0;
-        while tb_dock::primary_button_down() {
+        while launcher_platform::win::dock_input::primary_down() {
             std::thread::sleep(std::time::Duration::from_millis(8));
             let Some((cx, cy)) = tb_dock::cursor() else { continue };
             if cy < bar.top - pull || cy > bar.bottom + pull {
@@ -359,12 +358,15 @@ pub fn dock_drag(app: &AppHandle, core: &Arc<Core>) {
     });
 }
 
-/// An end of the docked strip was pressed (`dir`: `West` / `East`): whole cells with the
-/// mouse, the other end staying put; saved as `float_dock_slots` (floating keeps its own).
+/// An end of the docked strip was pressed (`dir`: `West` / `East`): the same end drag as the
+/// floating strip's (whole cells, the other end staying put, [`strip_sizing`]), followed here
+/// because the taskbar keeps the window's own sizing loop from working. The count is saved as
+/// `float_dock_slots` (floating keeps its own).
 pub fn dock_resize(app: &AppHandle, core: &Arc<Core>, dir: &str) {
-    let east = match dir {
-        "East" => true,
-        "West" => false,
+    use launcher_platform::snap::{drag_rect, strip_sizing, Strip};
+    let edge = match dir {
+        "West" => 1,
+        "East" => 2,
         _ => return,
     };
     let Some(w) = app.get_webview_window("float") else { return };
@@ -378,26 +380,26 @@ pub fn dock_resize(app: &AppHandle, core: &Arc<Core>, dir: &str) {
     std::thread::spawn(move || {
         let s = core.settings();
         let fit = dock_fit(&l, &s, &sp);
-        let right = x0 + w0;
-        let (mut n, mut x) = (fit.n, x0);
-        while tb_dock::primary_button_down() {
+        let strip = Strip { vertical: false, fixed: fit.fixed_px, cell: fit.cell_px, total: fit.max_n, min_across: 0, max_across: 0 };
+        let start = Rect::new(x0, 0, x0 + w0, sp.height);
+        let mut r = start;
+        while launcher_platform::win::dock_input::primary_down() {
             std::thread::sleep(std::time::Duration::from_millis(8));
             let Some((cx, _)) = tb_dock::cursor() else { continue };
-            let want = if east { w0 + (cx - c0.0) } else { w0 - (cx - c0.0) } as f64;
-            let m = ((want - fit.fixed_px) / fit.cell_px).round().clamp(1.0, fit.max_n as f64) as usize;
-            if m != n {
-                n = m;
-                let width = (fit.fixed_px + n as f64 * fit.cell_px).round() as i32;
-                x = if east { x0 } else { (right - width).max(0) };
-                tb_dock::place_docked(hwnd, x, width);
+            let next = strip_sizing(drag_rect(start, edge, cx - c0.0, 0), start, edge, &strip);
+            let next = Rect { left: next.left.max(0), ..next };
+            if next != r {
+                r = next;
+                tb_dock::place_docked(hwnd, r.left, r.width());
             }
         }
+        let n = ((r.width() as f64 - fit.fixed_px) / fit.cell_px).round().max(1.0) as usize;
         let scale = scale_of(&sp);
         let _ = core.mutate(true, |d| {
             // What would show anyway stays "automatic", so it keeps following the item count.
             d.settings.float_dock_slots = if n == fit.auto_n { 0 } else { n as u16 };
             if d.settings.float_dock_anchor == "free" {
-                d.settings.float_dock_x = (x as f64 / scale).round() as i32;
+                d.settings.float_dock_x = (r.left as f64 / scale).round() as i32;
             }
             Ok(())
         });

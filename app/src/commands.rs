@@ -58,8 +58,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         fit_float,
         float_undock,
         float_resize,
-        float_dock_drag,
-        float_dock_resize,
+        float_grab,
     ]
 }
 
@@ -76,33 +75,42 @@ async fn float_undock(app: AppHandle, core: State<'_, Arc<Core>>) -> Res<()> {
     Ok(())
 }
 
-/// The docked strip's handle was pressed: follow the mouse along the taskbar (or out of it).
+/// The strip's handle was pressed: it moves with the mouse. Floating, Windows' own move loop
+/// (with the magnet); in the taskbar, along it (or out of it).
 #[tauri::command]
-async fn float_dock_drag(app: AppHandle, core: State<'_, Arc<Core>>) -> Res<()> {
+async fn float_grab(app: AppHandle, core: State<'_, Arc<Core>>) -> Res<()> {
+    let Some(w) = app.get_webview_window("float") else { return Ok(()) };
     #[cfg(windows)]
-    crate::dock::dock_drag(&app, core.inner());
+    if let Ok(h) = w.hwnd() {
+        let hwnd = h.0 as isize;
+        if launcher_platform::win::dock::is_docked(hwnd) {
+            crate::dock::dock_drag(&app, core.inner());
+        } else {
+            let _ = app.run_on_main_thread(move || {
+                launcher_platform::win::magnet::begin_move(hwnd);
+            });
+        }
+    }
     #[cfg(not(windows))]
-    let _ = (app, core);
-    Ok(())
-}
-
-/// An end of the docked strip was pressed: more or fewer cells with the mouse.
-#[tauri::command]
-async fn float_dock_resize(app: AppHandle, core: State<'_, Arc<Core>>, dir: String) -> Res<()> {
-    #[cfg(windows)]
-    crate::dock::dock_resize(&app, core.inner(), &dir);
-    #[cfg(not(windows))]
-    let _ = (app, core, dir);
+    {
+        let _ = core;
+        let _ = w.start_dragging();
+    }
     Ok(())
 }
 
 /// Starts resizing the floating strip from the cursor (`dir`: `North` … `SouthEast`).
 #[tauri::command]
-async fn float_resize(app: AppHandle, dir: String) -> Res<()> {
+async fn float_resize(app: AppHandle, core: State<'_, Arc<Core>>, dir: String) -> Res<()> {
     let Some(w) = app.get_webview_window("float") else { return Ok(()) };
     #[cfg(windows)]
     if let Ok(h) = w.hwnd() {
         let hwnd = h.0 as isize;
+        // In the taskbar the window's sizing loop does not work: the launcher follows the mouse.
+        if launcher_platform::win::dock::is_docked(hwnd) {
+            crate::dock::dock_resize(&app, core.inner(), &dir);
+            return Ok(());
+        }
         let _ = app.run_on_main_thread(move || {
             launcher_platform::win::magnet::begin_resize(hwnd, &dir);
         });
@@ -120,6 +128,7 @@ async fn float_resize(app: AppHandle, dir: String) -> Res<()> {
             "West" => D::West,
             _ => D::East,
         };
+        let _ = core;
         let _ = w.start_resize_dragging(d);
     }
     Ok(())

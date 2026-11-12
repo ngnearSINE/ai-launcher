@@ -19,9 +19,12 @@
   const s = $derived(settings())
   const all = $derived(visibleInstances())
   const list = $derived(visibleInstances({ forFloat: true }))
-  // Docked in the taskbar it is always horizontal, flush with the taskbar.
+  // Docked in the taskbar it is the horizontal strip with two differences: the taskbar sets its
+  // thickness (no corner or side grips) and it is flush (no margin). Everything else — handle,
+  // cells, ends, reordering — is the same code.
   const docked = $derived(s.floatDocked)
   const vertical = $derived(!docked && s.floatOrientation === 'vertical')
+  const thicknessFixed = $derived(docked)
 
   // Base geometry (logical px at 100 %). `fixed` + n × `cell` is the strip's length.
   const ICON = 38
@@ -170,8 +173,7 @@
   function resize(e: PointerEvent, dir: Dir) {
     if (e.button !== 0) return
     e.preventDefault()
-    // Docked, the taskbar owns the window frame: the launcher follows the mouse itself.
-    void (docked ? api.floatDockResize(dir) : api.floatResize(dir))
+    void api.floatResize(dir)
   }
   const ends = $derived<[Dir, string][]>(vertical ? [['North', 'n'], ['South', 's']] : [['West', 'w'], ['East', 'e']])
   const sides = $derived<[Dir, string][]>(vertical ? [['West', 'w'], ['East', 'e']] : [['North', 'n'], ['South', 's']])
@@ -191,18 +193,16 @@
   tabindex="-1"
   oncontextmenu={stripMenu}
 >
-  {#if docked}
-    <!-- In the taskbar: drag along it to move (snapping to the icons, widgets and tray), or
-         out of it to float again. The launcher follows the mouse; the page only says "pressed". -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="handle" title={t('좌우로 끌어 옮기기 · 작업 표시줄 밖으로 끌어내면 떨어져요')} onpointerdown={(e) => e.button === 0 && (e.preventDefault(), api.floatDockDrag())}>
-      <span class="mesh"></span>
-    </div>
-  {:else}
-    <div class="handle" data-tauri-drag-region title={t('끌어서 옮기기 · 작업 표시줄에 놓으면 붙어요')}>
-      <span class="mesh"></span>
-    </div>
-  {/if}
+  <!-- The launcher moves the strip (floating: with the magnet, onto the taskbar to dock; docked:
+       along the taskbar, or out of it); the page only says "pressed". -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="handle"
+    title={docked ? t('좌우로 끌어 옮기기 · 작업 표시줄 밖으로 끌어내면 떨어져요') : t('끌어서 옮기기 · 작업 표시줄에 놓으면 붙어요')}
+    onpointerdown={(e) => e.button === 0 && (e.preventDefault(), api.floatGrab())}
+  >
+    <span class="mesh"></span>
+  </div>
 
   <div class="view" class:fade-a={before > 0} class:fade-b={after > 0} class:active={sc.active}>
     <div class="scroll" role="group" aria-label={t('인스턴스')} bind:this={viewport} onscroll={measure} onwheel={wheel} onpointerenter={() => sc.max > 0 && wake()}>
@@ -245,7 +245,7 @@
   <!-- Corners: across = icon size, along = cells. Ends: cells only. Long sides: icon size only
        (the same cells, so the strip gets longer with them). Pointer-only affordances: the same
        is in Settings → Launcher as sliders. -->
-  {#each docked ? [] : [['NorthWest', 'nw'], ['NorthEast', 'ne'], ['SouthWest', 'sw'], ['SouthEast', 'se']] as [dir, cls] (cls)}
+  {#each thicknessFixed ? [] : [['NorthWest', 'nw'], ['NorthEast', 'ne'], ['SouthWest', 'sw'], ['SouthEast', 'se']] as [dir, cls] (cls)}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span class="rz corner {cls}" title={vertical ? t('좌우로 끌면 아이콘 크기, 위아래로 끌면 칸 수') : t('위아래로 끌면 아이콘 크기, 좌우로 끌면 칸 수')} onpointerdown={(e) => resize(e, dir as Dir)}><i></i></span>
   {/each}
@@ -253,7 +253,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span class="rz edge end {cls}" title={t('끌어서 칸 수 조절')} onpointerdown={(e) => resize(e, dir)}><i></i></span>
   {/each}
-  {#each docked ? [] : sides as [dir, cls] (cls)}
+  {#each thicknessFixed ? [] : sides as [dir, cls] (cls)}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span class="rz edge side {cls}" title={t('끌어서 아이콘 크기 조절')} onpointerdown={(e) => resize(e, dir)}><i></i></span>
   {/each}

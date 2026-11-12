@@ -56,9 +56,11 @@ jobs:
         run: |
           tag="${{ steps.tag.outputs.tag }}"
           repo="${{ github.repository }}"
-          id=$(gh api "repos/$repo/releases?per_page=100" --jq ".[] | select(.tag_name==\"$tag\") | .id" | head -1)
+          # A rebuilt draft can come back as "untagged-…", so it is also found by its name and
+          # given its tag again.
+          id=$(gh api "repos/$repo/releases?per_page=100" --jq ".[] | select(.tag_name==\"$tag\" or (.draft and .name==\"AI Launcher $tag\")) | .id" | head -1)
           if [ -n "$id" ]; then
-            gh api -X PATCH "repos/$repo/releases/$id" -F body=@notes.md >/dev/null
+            gh api -X PATCH "repos/$repo/releases/$id" -f tag_name="$tag" -F body=@notes.md >/dev/null
           else
             id=$(gh api -X POST "repos/$repo/releases" -f tag_name="$tag" -f name="AI Launcher $tag" -F draft=true -F body=@notes.md --jq .id)
           fi
@@ -71,8 +73,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every platform adds its entry to the same latest.json, so installed copies on x64 and
-        # arm64 both find their update. Windows arm64 is cross-compiled on the x64 runner.
+        # Each platform uploads its installers and signatures; the publish job then writes one
+        # latest.json for all of them, so installed copies on x64 and arm64 both find their
+        # update. Windows arm64 is cross-compiled on the x64 runner.
         include:
           - os: windows-latest
             arch: x64
@@ -129,22 +132,48 @@ jobs:
           projectPath: app
           tauriScript: npx --prefix ../ui tauri
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
+          # Parallel jobs rewriting one latest.json race ("Not Found" on update, a platform
+          # missing); the publish job writes it once instead.
+          includeUpdaterJson: false
           args: ${{ matrix.args }} --config tauri.release.conf.json
 
   publish:
     needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
+      # The script comes from the ref the workflow runs from, so an older tag can be rebuilt.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: latest.json from the signatures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          repo="${{ github.repository }}"
+          id="${{ needs.create-release.outputs.release_id }}"
+          tag="${{ needs.create-release.outputs.tag }}"
+          mkdir sigs
+          gh api "repos/$repo/releases/$id" --jq '.assets[] | select(.name|endswith(".sig")) | "\(.id) \(.name)"' |
+            while read -r aid name; do
+              gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$aid" > "sigs/$name"
+            done
+          python3 -I .github/scripts/latest_json.py "${tag#v}" sigs "$repo" > latest.json
+          cat latest.json
+          old=$(gh api "repos/$repo/releases/$id" --jq '.assets[] | select(.name=="latest.json") | .id')
+          if [ -n "$old" ]; then gh api -X DELETE "repos/$repo/releases/assets/$old"; fi
+          curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Content-Type: application/json' \
+            --data-binary @latest.json "https://uploads.github.com/repos/$repo/releases/$id/assets?name=latest.json" >/dev/null
+
       - name: Publish the draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           id="${{ needs.create-release.outputs.release_id }}"
+          tag="${{ needs.create-release.outputs.tag }}"
           names=$(gh api "repos/${{ github.repository }}/releases/$id" --jq '.assets[].name')
           echo "$names"
           for want in 'latest.json' '_x64-setup.exe' '_arm64-setup.exe' '_amd64.AppImage' '_aarch64.AppImage' '_amd64.deb' '_arm64.deb'; do
             echo "$names" | grep -Fq -- "$want" || { echo "::error::missing $want, not publishing"; exit 1; }
           done
-          gh api -X PATCH "repos/${{ github.repository }}/releases/$id" -F draft=false -f make_latest=true >/dev/null
+          gh api -X PATCH "repos/${{ github.repository }}/releases/$id" -f tag_name="$tag" -F draft=false -f make_latest=true >/dev/null

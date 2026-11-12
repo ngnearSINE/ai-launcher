@@ -32,5 +32,10 @@ trash = "5"
 sys-locale = "0.3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Off Windows the floating strip is resized by the window system; tauri does not re-export
+# the direction type `Window::start_resize_dragging` takes.
+[target.'cfg(not(windows))'.dependencies]
+tauri-runtime = "2"
+
 [features]
 custom-protocol = ["tauri/custom-protocol"]

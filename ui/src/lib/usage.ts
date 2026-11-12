@@ -8,7 +8,8 @@ import { t } from './i18n.svelte'
 import { until } from './format'
 
 const HOUR = 3600e3
-const LEN: Record<string, number> = { fiveHour: 5 * HOUR, weekly: 7 * 24 * HOUR, scoped: 7 * 24 * HOUR }
+// A monthly window is a billing cycle (Cursor); 30 days is close enough for the pace mark.
+const LEN: Record<string, number> = { fiveHour: 5 * HOUR, weekly: 7 * 24 * HOUR, monthly: 30 * 24 * HOUR, scoped: 7 * 24 * HOUR }
 
 export interface Win {
   q: Quota
@@ -52,8 +53,12 @@ export function win(q: Quota, s: Settings, now = Date.now()): Win {
 
 /** The line under a usage bar: the countdown first (what you act on), or — only under a pace
  *  warning (half or less left and running out well before the reset) — when it runs out. */
-export function windowNote(w: Win, now = Date.now()): string {
-  if (w.paceWarn && w.emptyMs !== null) return t('지금 속도면 {time} 뒤 바닥나요', { time: until(new Date(now + w.emptyMs).toISOString(), now) })
+/** `short` drops "at this rate" for narrow table cells; the bar's colour and pace tick carry it. */
+export function windowNote(w: Win, now = Date.now(), short = false): string {
+  if (w.paceWarn && w.emptyMs !== null) {
+    const time = until(new Date(now + w.emptyMs).toISOString(), now)
+    return short ? t('{time} 뒤 바닥나요', { time }) : t('지금 속도면 {time} 뒤 바닥나요', { time })
+  }
   if (w.q.resetsAt) return t('{time} 뒤 초기화', { time: until(w.q.resetsAt, now) })
   return ''
 }
@@ -88,7 +93,7 @@ export function needsText(inst: Instance): string | null {
 }
 
 /** A usage error as a sentence: signed-out / expired read as facts with a next step, not alarms. */
-export function usageErrorText(e: UsageError | null | undefined): string {
+export function usageErrorText(e: UsageError | null | undefined, nextAt?: string): string {
   if (!e) return ''
   switch (e.code) {
     case 'notSignedIn':
@@ -99,8 +104,12 @@ export function usageErrorText(e: UsageError | null | undefined): string {
       return t('이 프로필의 계정을 확인할 수 없어요')
     case 'decrypt':
       return t('로그인 정보를 읽지 못했어요')
-    case 'rateLimited':
-      return t('요청 제한 · {n}분 뒤 다시 시도', { n: Math.ceil(e.detail / 60) })
+    case 'rateLimited': {
+      // When the launcher really asks again (its own back-off can be longer than what the
+      // service said, which is often 0).
+      const secs = nextAt ? (Date.parse(nextAt) - Date.now()) / 1000 : e.detail
+      return t('요청 제한 · {n}분 뒤 다시 시도', { n: Math.max(1, Math.ceil(secs / 60)) })
+    }
     case 'network':
       return t('네트워크 오류')
     default:
@@ -144,8 +153,15 @@ export function scopedOf(org: OrgUsage | undefined, s: Settings, name: RegExp): 
 
 export function windowsOf(org: OrgUsage | undefined, s: Settings) {
   const w5 = org?.quotas.find((q) => q.kind === 'fiveHour')
-  const ww = org?.quotas.find((q) => q.kind === 'weekly')
+  // The long window: weekly, or for apps billed by the month (Cursor) the plan's cycle.
+  const ww = org?.quotas.find((q) => q.kind === 'weekly') ?? org?.quotas.find((q) => q.kind === 'monthly')
   return { w5: w5 ? win(w5, s) : undefined, ww: ww ? win(ww, s) : undefined }
+}
+
+/** Name of the long window from `windowsOf`: weekly, or a billing month. `short` is the one-letter tag. */
+export function longLabel(q: Quota, short = false): string {
+  if (q.kind === 'monthly') return short ? t('월') : t('이번 달')
+  return short ? t('주') : t('주간')
 }
 
 /** `''`, `'warn'` or `'crit'` from what is left (thresholds are on use) and pace. */

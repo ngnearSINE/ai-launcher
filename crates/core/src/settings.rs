@@ -98,6 +98,16 @@ pub struct Settings {
     /// Global hotkey that opens / closes the main window.
     pub float_hotkey: String,
     pub float_hotkey_enabled: bool,
+    /// The instance-colour dot (with its running / usage ring) on each icon's corner.
+    pub float_badges: bool,
+    /// Icons of instances that are not running are drawn faded.
+    pub float_dim_idle: bool,
+    /// Only running instances are on the strip.
+    pub float_running_only: bool,
+    /// The "open the main window" button at the strip's end.
+    pub float_show_open: bool,
+    /// Hovering an icon shows its account and usage.
+    pub float_tips: bool,
 
     // Taskbar (advanced)
     pub taskbar_separate: bool,
@@ -112,6 +122,8 @@ pub struct Settings {
     pub usage_show_reset: bool,
     /// Numbers and bars show what is `left` (default) or what is `used`.
     pub usage_value: String,
+    /// Bar fill: `calm` (neutral, colour only when running low — default) or `accent`.
+    pub usage_bar_tone: String,
     /// White tick where usage should be if it were spread evenly over the window.
     pub usage_show_pace: bool,
     pub usage_warn_percent: u8,
@@ -182,6 +194,11 @@ impl Default for Settings {
             float_position: None,
             float_hotkey: "Alt+Shift+F".into(),
             float_hotkey_enabled: true,
+            float_badges: true,
+            float_dim_idle: false,
+            float_running_only: false,
+            float_show_open: true,
+            float_tips: true,
 
             taskbar_separate: true,
             taskbar_badge: true,
@@ -193,6 +210,7 @@ impl Default for Settings {
             usage_refresh_minutes: 5,
             usage_show_reset: true,
             usage_value: "left".into(),
+            usage_bar_tone: "calm".into(),
             usage_show_pace: true,
             usage_warn_percent: 70,
             usage_crit_percent: 90,

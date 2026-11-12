@@ -9,7 +9,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use launcher_core::catalog::effective;
 use launcher_core::{Instance, UsageKind};
-use launcher_usage::{claude, QuotaKind, UsageError, UsageReport};
+use launcher_usage::{claude, cursor, QuotaKind, UsageError, UsageReport};
 use serde::Serialize;
 
 use crate::core::Core;
@@ -36,14 +36,14 @@ impl UsageEntry {
         Self { status: "idle", report: None, error: None, next_at: Utc::now(), strikes: 0, source }
     }
 
-    /// Higher = less headroom. Uses the worst of 5-hour and weekly of the first organisation
-    /// the instance shows (`shown`, from [`shown_orgs`]).
+    /// Higher = less headroom. Uses the worst of the 5-hour, weekly and monthly (Cursor plan)
+    /// windows of the first organisation the instance shows (`shown`, from [`shown_orgs`]).
     pub fn headroom_score(&self, shown: &[String]) -> Option<f64> {
         let report = self.report.as_ref()?;
         let org = report.orgs.iter().find(|o| shown.contains(&o.org_uuid)).or(report.orgs.first())?;
         org.quotas
             .iter()
-            .filter(|q| matches!(q.kind, QuotaKind::FiveHour | QuotaKind::Weekly))
+            .filter(|q| matches!(q.kind, QuotaKind::FiveHour | QuotaKind::Weekly | QuotaKind::Monthly))
             .map(|q| q.used_percent)
             .reduce(f64::max)
     }
@@ -74,6 +74,56 @@ pub fn scores(core: &Core, ids: &[String]) -> HashMap<String, f64> {
         .collect()
 }
 
+// ---- last good numbers on disk -----------------------------------------------------------------
+// Every instance's last report is kept in `usage-cache.json` (numbers only: no token, no
+// address), so after a restart — an update, say — the floating bar and the cards show them at
+// once, marked by their age, instead of nothing while the service is still rate limiting.
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Cached {
+    source: String,
+    report: UsageReport,
+}
+
+fn cache_path(core: &Core) -> std::path::PathBuf {
+    core.config_dir.join("usage-cache.json")
+}
+
+static CACHE: std::sync::OnceLock<parking_lot::Mutex<HashMap<String, Cached>>> = std::sync::OnceLock::new();
+
+fn cache(core: &Core) -> &'static parking_lot::Mutex<HashMap<String, Cached>> {
+    CACHE.get_or_init(|| {
+        let read = std::fs::read(cache_path(core)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        parking_lot::Mutex::new(read)
+    })
+}
+
+/// A fresh entry, with the last numbers this folder gave if there are any.
+fn entry_for(core: &Core, id: &str, source: String) -> UsageEntry {
+    let mut e = UsageEntry::new(source);
+    if let Some(c) = cache(core).lock().get(id).filter(|c| c.source == e.source) {
+        e.report = Some(c.report.clone());
+        e.status = "ok";
+    }
+    e
+}
+
+fn remember(core: &Core, id: &str, source: &str, report: &UsageReport) {
+    let mut c = cache(core).lock();
+    c.insert(id.to_string(), Cached { source: source.to_string(), report: report.clone() });
+    if let Ok(bytes) = serde_json::to_vec(&*c) {
+        let path = cache_path(core);
+        let tmp = path.with_extension("json.tmp");
+        if std::fs::write(&tmp, bytes).is_ok() {
+            let _ = std::fs::rename(&tmp, &path);
+        }
+    }
+}
+
+fn forget_missing(core: &Core, keep: &[(String, std::path::PathBuf)]) {
+    cache(core).lock().retain(|id, _| keep.iter().any(|(j, _)| j == id));
+}
+
 pub fn start(core: Arc<Core>) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(800)).await;
@@ -87,8 +137,8 @@ pub fn start(core: Arc<Core>) {
     });
 }
 
-/// Instances that have usage and the folder each one must be read from.
-fn jobs(core: &Core) -> Vec<(String, std::path::PathBuf)> {
+/// Instances that have usage, the folder each one must be read from and where it comes from.
+fn jobs(core: &Core) -> Vec<(String, std::path::PathBuf, UsageKind)> {
     let store = core.store.lock();
     let data = &store.data;
     data.instances
@@ -96,14 +146,32 @@ fn jobs(core: &Core) -> Vec<(String, std::path::PathBuf)> {
         .filter_map(|inst| {
             let install = data.installations.iter().find(|i| i.id == inst.installation_id)?;
             let adapter = core.registry.get(&install.adapter)?;
-            if adapter.usage(install) != Some(UsageKind::ClaudeDesktop) || !effective(&data.settings, inst).usage_enabled {
+            let kind = adapter.usage(install)?;
+            if !effective(&data.settings, inst).usage_enabled {
                 return None;
             }
             // Exactly this instance's folder, resolved to where the app really wrote it.
             let dir = launcher_core::catalog::physical_profile_dir(data, &core.registry, &core.env, inst)?;
-            Some((inst.id.clone(), dir))
+            Some((inst.id.clone(), dir, kind))
         })
         .collect()
+}
+
+/// Whether the folder holds a sign-in of that kind (local files only, no request).
+fn has_session(kind: UsageKind, dir: &std::path::Path) -> bool {
+    match kind {
+        UsageKind::ClaudeDesktop => claude::has_session(dir),
+        UsageKind::Cursor => cursor::has_session(cursor::App::Cursor, dir),
+        UsageKind::GrokBot => cursor::has_session(cursor::App::GrokBot, dir),
+    }
+}
+
+async fn fetch(core: &Core, kind: UsageKind, dir: &std::path::Path) -> Result<UsageReport, UsageError> {
+    match kind {
+        UsageKind::ClaudeDesktop => claude::fetch(&core.http, dir).await,
+        UsageKind::Cursor => cursor::fetch(&core.http, cursor::App::Cursor, dir).await,
+        UsageKind::GrokBot => cursor::fetch(&core.http, cursor::App::GrokBot, dir).await,
+    }
 }
 
 async fn tick(core: &Arc<Core>) {
@@ -111,22 +179,24 @@ async fn tick(core: &Arc<Core>) {
     let refresh = core.settings().usage_refresh_minutes as i64 * 60;
     {
         let mut usage = core.usage.lock();
-        usage.retain(|id, _| jobs.iter().any(|(j, _)| j == id));
+        usage.retain(|id, _| jobs.iter().any(|(j, _, _)| j == id));
     }
-    for (id, dir) in jobs {
+    let keep: Vec<(String, std::path::PathBuf)> = jobs.iter().map(|(id, dir, _)| (id.clone(), dir.clone())).collect();
+    forget_missing(core, &keep);
+    for (id, dir, kind) in jobs {
         let source = dir.display().to_string();
         let due = {
             let mut usage = core.usage.lock();
-            let e = usage.entry(id.clone()).or_insert_with(|| UsageEntry::new(source.clone()));
+            let e = usage.entry(id.clone()).or_insert_with(|| entry_for(core, &id, source.clone()));
             if e.source != source {
-                *e = UsageEntry::new(source.clone());
+                *e = entry_for(core, &id, source.clone());
             }
             Utc::now() >= e.next_at
         };
         if !due {
             continue;
         }
-        if !claude::has_session(&dir) {
+        if !has_session(kind, &dir) {
             let mut usage = core.usage.lock();
             if let Some(e) = usage.get_mut(&id) {
                 e.status = "error";
@@ -139,13 +209,14 @@ async fn tick(core: &Arc<Core>) {
             continue;
         }
         set_status(core, &id, "loading");
-        let result = claude::fetch(&core.http, &dir).await;
+        let result = fetch(core, kind, &dir).await;
         {
             let mut usage = core.usage.lock();
             let Some(e) = usage.get_mut(&id) else { continue };
             let now = Utc::now();
             match result {
                 Ok(r) => {
+                    remember(core, &id, &e.source, &r);
                     e.status = "ok";
                     e.report = Some(r);
                     e.error = None;

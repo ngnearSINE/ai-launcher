@@ -17,6 +17,19 @@ use crate::crypto::decrypt_os_crypt;
 use crate::model::*;
 
 const API: &str = "https://api.anthropic.com/api/oauth";
+
+/// `profile` answers per token (a token always belongs to one account and organisation), kept
+/// in memory under a hash of the token so each refresh asks only for `usage`. The usage API is
+/// tightly rate limited and shared with the Claude apps and other tools reading the same
+/// account; halving the requests keeps the launcher out of their way.
+static PROFILES: std::sync::LazyLock<parking_lot::Mutex<std::collections::HashMap<u64, Value>>> = std::sync::LazyLock::new(Default::default);
+
+fn token_key(token: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    token.hash(&mut h);
+    h.finish()
+}
 const HOST_MARK: &str = ":https://api.anthropic.com:";
 
 #[derive(Debug, Clone, PartialEq)]
@@ -287,13 +300,21 @@ pub async fn fetch(client: &reqwest::Client, profile_dir: &Path) -> Result<Usage
     let mut email = String::new();
     let mut last_err = None;
     for t in &session.tokens {
-        let profile = match get(client, "profile", &t.token).await {
-            Ok(p) => p,
-            Err(e @ UsageError::RateLimited(_)) => return Err(e),
-            Err(e) => {
-                last_err = Some(e);
-                continue;
-            }
+        let key = token_key(&t.token);
+        let cached = PROFILES.lock().get(&key).cloned();
+        let profile = match cached {
+            Some(p) => p,
+            None => match get(client, "profile", &t.token).await {
+                Ok(p) => {
+                    PROFILES.lock().insert(key, p.clone());
+                    p
+                }
+                Err(e @ UsageError::RateLimited(_)) => return Err(e),
+                Err(e) => {
+                    last_err = Some(e);
+                    continue;
+                }
+            },
         };
         // The token must belong to the account this profile declares.
         let acct = profile["account"]["uuid"].as_str().unwrap_or_default().to_lowercase();

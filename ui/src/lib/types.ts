@@ -46,6 +46,11 @@ export interface Settings {
   floatPosition: [number, number] | null
   floatHotkey: string
   floatHotkeyEnabled: boolean
+  floatBadges: boolean
+  floatDimIdle: boolean
+  floatRunningOnly: boolean
+  floatShowOpen: boolean
+  floatTips: boolean
   taskbarSeparate: boolean
   taskbarBadge: boolean
   taskbarRelaunchThroughLauncher: boolean
@@ -55,6 +60,7 @@ export interface Settings {
   usageRefreshMinutes: number
   usageShowReset: boolean
   usageValue: 'left' | 'used'
+  usageBarTone: 'calm' | 'accent'
   usageShowPace: boolean
   usageWarnPercent: number
   usageCritPercent: number
@@ -121,7 +127,7 @@ export interface InstanceAdvanced {
   hiddenInFloat: boolean
 }
 
-export type QuotaKind = 'fiveHour' | 'weekly' | 'scoped' | 'credits'
+export type QuotaKind = 'fiveHour' | 'weekly' | 'monthly' | 'scoped' | 'credits'
 
 export interface Quota {
   kind: QuotaKind

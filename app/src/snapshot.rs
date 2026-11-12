@@ -2,7 +2,7 @@
 
 use launcher_core::adapters::webapp::PRESETS;
 use launcher_core::catalog::effective;
-use launcher_core::{Brand, Group, Installation, Instance, Isolation, Settings};
+use launcher_core::{Brand, Group, Installation, Instance, Isolation, Settings, UsageKind};
 use serde::Serialize;
 
 use crate::core::Core;
@@ -40,6 +40,8 @@ pub struct InstallView {
     pub brand: Brand,
     pub isolation: Isolation,
     pub has_usage: bool,
+    /// Where the usage comes from (`claudeDesktop`, `cursor`, `grokBot`), when it has any.
+    pub usage_kind: Option<UsageKind>,
     pub supports_default_profile: bool,
     pub default_profile_dir: Option<String>,
 }
@@ -100,6 +102,7 @@ pub fn build(core: &Core) -> Snapshot {
                 brand: a.map(|a| a.brand(i)).unwrap_or(Brand { color: "#8E8E93".into(), letter: "?".into(), logo: "generic".into() }),
                 isolation: a.map(|a| a.isolation(i)).unwrap_or(Isolation::None),
                 has_usage: a.and_then(|a| a.usage(i)).is_some(),
+                usage_kind: a.and_then(|a| a.usage(i)),
                 supports_default_profile: a.map(|a| a.supports_default_profile(i)).unwrap_or(false),
                 default_profile_dir: a.and_then(|a| a.default_profile_dir(i, &core.env)).map(|p| p.display().to_string()),
                 install: i.clone(),

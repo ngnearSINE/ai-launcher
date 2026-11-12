@@ -31,6 +31,10 @@ pub enum Isolation {
 pub enum UsageKind {
     /// Claude Desktop: the OAuth token cache inside that instance's own profile folder.
     ClaudeDesktop,
+    /// Cursor: the sign-in in `User/globalStorage/state.vscdb` of that instance's folder.
+    Cursor,
+    /// Grok Bot: the Cursor account in `sand-secrets.json` of that instance's folder.
+    GrokBot,
 }
 
 #[derive(Debug, Clone, Serialize)]

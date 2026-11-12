@@ -107,7 +107,7 @@
         <p class="faint">{t('이 인스턴스는 사용량 조회가 꺼져 있어요. 편집 → 고급에서 켤 수 있어요.')}</p>
       {:else if !usage?.report}
         {#if usage?.error}
-          <p class="muted">{usageErrorText(usage.error)}</p>
+          <p class="muted">{usageErrorText(usage.error, usage.nextAt)}</p>
         {:else}
           <div class="grid">{#each [0, 1] as i (i)}<div class="skel"></div>{/each}</div>
         {/if}
@@ -122,7 +122,7 @@
             <span class="legend">{#each org.breakdown as b, i (b.label)}<span><i class="s{i}"></i>{b.label} <span class="num">{Math.round(b.percent)}%</span></span>{/each}</span>
           </div>
         {/if}
-        {#if usage.error}<p class="stale"><Icon name="alert" size={13} /> {usageErrorText(usage.error)} · {t('{time} 기준 숫자예요', { time: ago(usage.report.fetchedAt, ui.now) })}</p>{/if}
+        {#if usage.error}<p class="stale"><Icon name="alert" size={13} /> {usageErrorText(usage.error, usage.nextAt)} · {t('{time} 기준 숫자예요', { time: ago(usage.report.fetchedAt, ui.now) })}</p>{/if}
       {/if}
     </section>
   {/if}

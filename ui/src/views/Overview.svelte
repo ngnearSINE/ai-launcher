@@ -7,7 +7,7 @@
   import { usageInstances } from '../lib/sidebar.svelte'
   import { dialogs, installationOf, run, settings, ui, visibleInstances } from '../lib/state.svelte'
   import type { Instance } from '../lib/types'
-  import { bestClaude, mainOrg, scopedOf, usageErrorText, windowsOf } from '../lib/usage'
+  import { bestClaude, levelOf, longLabel, mainOrg, scopedOf, usageErrorText, windowsOf } from '../lib/usage'
   import Icon from '../components/Icon.svelte'
   import StatusBadge from '../components/StatusBadge.svelte'
   import UsageWindow from '../components/UsageWindow.svelte'
@@ -45,27 +45,34 @@
   {:else}
     {#if best && bestWins && (bestWins.w5 || bestWins.ww)}
       <section class="pick">
-        <div class="pick-head">
-          <StatusBadge inst={best} size={36} />
-          <div class="who">
-            <div class="lab">{t('지금 쓰기 좋은 Claude 계정')}</div>
-            <div class="name truncate">{best.alias} <span class="faint">{best.usage?.report?.email ?? ''}</span></div>
-          </div>
-          <button class="btn primary" onclick={() => primary(best)}>
-            {#if best.running}<Icon name="focus" size={14} /> {t('앞으로 가져오기')}{:else}<Icon name="play" size={11} /> {t('열기')}{/if}
-          </button>
+        <StatusBadge inst={best} size={36} />
+        <div class="who">
+          <div class="lab truncate">{t('지금 쓰기 좋은 Claude 계정')}</div>
+          <div class="name truncate">{best.alias} <span class="faint">{best.usage?.report?.email ?? ''}</span></div>
         </div>
-        <div class="pair">
-          {#if bestWins.w5}<UsageWindow q={bestWins.w5.q} />{/if}
-          {#if bestWins.ww}<UsageWindow q={bestWins.ww.q} />{/if}
-        </div>
+        <dl class="stats num">
+          {#if bestWins.w5}<div class={levelOf(bestWins.w5, s)}><dt>{t('5시간')}</dt><dd>{Math.round(bestWins.w5.shown)}%</dd></div>{/if}
+          {#if bestWins.ww}<div class={levelOf(bestWins.ww, s)}><dt>{longLabel(bestWins.ww.q)}</dt><dd>{Math.round(bestWins.ww.shown)}%</dd></div>{/if}
+        </dl>
+        <button class="btn primary" onclick={() => primary(best)}>
+          {#if best.running}<Icon name="focus" size={14} /> {t('앞으로 가져오기')}{:else}<Icon name="play" size={11} /> {t('열기')}{/if}
+        </button>
       </section>
     {/if}
 
     {#if accounts.length}
       <section>
-        <h2>{t('계정별 사용량')}</h2>
+        <div class="h2-row">
+          <h2>{t('계정별 사용량')}</h2>
+          <span class="faint small">{s.usageValue === 'used' ? t('쓴 양 기준') : t('남은 양 기준')}</span>
+        </div>
         <div class="table" class:fable={hasFable} role="table">
+          <div class="tr th" role="row">
+            <div role="columnheader">{t('계정')}</div>
+            <div role="columnheader">{t('5시간')}</div>
+            <div role="columnheader">{t('주간')}</div>
+            {#if hasFable}<div role="columnheader">Fable</div>{/if}
+          </div>
           {#each accounts as a (a.id)}
             {@const w = windowsOf(mainOrg(a), s)}
             {@const fable = scopedOf(mainOrg(a), s, FABLE)}
@@ -73,16 +80,19 @@
               <div class="acc" role="cell">
                 <StatusBadge inst={a} size={24} />
                 <div class="who">
-                  <div class="name truncate">{a.alias}</div>
+                  <div class="name-row">
+                    <span class="name truncate">{a.alias}</span>
+                    {#if best?.id === a.id}<span class="tag">{t('추천')}</span>{/if}
+                  </div>
                   <div class="faint small truncate">{a.usage?.report?.email ?? installationOf(a)?.name}</div>
                 </div>
               </div>
               {#if w.w5 || w.ww}
-                <div role="cell">{#if w.w5}<UsageWindow q={w.w5.q} />{/if}</div>
-                <div role="cell">{#if w.ww}<UsageWindow q={w.ww.q} />{/if}</div>
-                {#if hasFable}<div role="cell">{#if fable}<UsageWindow q={fable.q} />{/if}</div>{/if}
+                <div role="cell">{#if w.w5}<UsageWindow q={w.w5.q} col="fiveHour" />{/if}</div>
+                <div role="cell">{#if w.ww}<UsageWindow q={w.ww.q} col="weekly" />{/if}</div>
+                {#if hasFable}<div role="cell">{#if fable}<UsageWindow q={fable.q} col={fable.q.kind} />{/if}</div>{/if}
               {:else}
-                <div class="span2 muted small" class:span3={hasFable} role="cell">{a.usage?.error ? usageErrorText(a.usage.error) : t('불러오는 중…')}</div>
+                <div class="span2 muted small" class:span3={hasFable} role="cell">{a.usage?.error ? usageErrorText(a.usage.error, a.usage.nextAt) : t('불러오는 중…')}</div>
               {/if}
             </div>
           {/each}
@@ -118,6 +128,7 @@
 
 <style>
   .overview {
+    container: overview / inline-size;
     --knock: var(--layer);
     max-width: 960px;
     margin: 0 auto;
@@ -144,17 +155,79 @@
   .small {
     font-size: var(--fs-12);
   }
+  /* The answer to "which account now": one line, its two numbers, one button. The table below is
+     the evidence, so the bars are not repeated here. */
   .pick {
-    padding: 16px 18px 18px;
+    --knock: var(--s1);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px 14px 18px;
     border-radius: var(--r-lg);
     background: var(--s1);
     border: 1px solid var(--line);
   }
-  .pick-head {
-    --knock: var(--s1);
+  .stats {
+    display: flex;
+    gap: 24px;
+    margin: 0 8px 0 0;
+  }
+  .stats div {
+    display: grid;
+    justify-items: end;
+    gap: 2px;
+  }
+  .stats dt {
+    font-size: var(--fs-12);
+    color: var(--text-2);
+  }
+  .stats dd {
+    margin: 0;
+    font-size: var(--fs-17);
+    font-weight: 650;
+    line-height: 1.1;
+  }
+  .stats .warn dd {
+    color: var(--st-warn);
+  }
+  .stats .crit dd {
+    color: var(--st-crit);
+  }
+  .h2-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .h2-row h2 {
+    margin: 0;
+  }
+  .th {
+    padding-top: 9px;
+    padding-bottom: 9px;
+    font-size: var(--fs-12);
+    color: var(--text-3);
+    background: var(--s1);
+    border-radius: var(--r-md) var(--r-md) 0 0;
+  }
+  .th:hover {
+    background: var(--s1);
+  }
+  .name-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 6px;
+    min-width: 0;
+  }
+  .tag {
+    flex: none;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: var(--fs-12);
+    line-height: 16px;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
   }
   .who {
     flex: 1;
@@ -172,31 +245,30 @@
     font-size: var(--fs-13);
     font-weight: 400;
   }
-  .pair {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 32px;
-    margin-top: 16px;
-  }
   .table {
+    container: usage / inline-size;
     display: grid;
     border: 1px solid var(--line);
     border-radius: var(--r-md);
   }
   .tr {
     display: grid;
-    grid-template-columns: minmax(180px, 1.1fr) 1fr 1fr;
+    grid-template-columns: minmax(200px, 1.4fr) 1fr 1fr;
     align-items: center;
     gap: 28px;
     padding: 12px 16px;
     outline: none;
   }
   .fable .tr {
-    grid-template-columns: minmax(180px, 1.1fr) 1fr 1fr 1fr;
+    grid-template-columns: minmax(200px, 1.4fr) 1fr 1fr 1fr;
     gap: 24px;
   }
   .span3 {
     grid-column: span 3;
+  }
+  /* Cells may shrink below their one-line note; the note truncates instead of widening the column. */
+  .tr > div {
+    min-width: 0;
   }
   .tr + .tr {
     border-top: 1px solid var(--line);
@@ -274,22 +346,58 @@
     display: flex;
     gap: 8px;
   }
-  @media (max-width: 720px) {
-    .tr {
-      grid-template-columns: 1fr;
-      gap: 10px;
+  /* Laid out by the space the table really has (the sidebar and window width both change it),
+     not by the window. Narrow: the account goes on its own line and the windows share the row
+     below, so each keeps room for a one-line note. Very narrow: one window per line, each
+     labelled again since the column header no longer lines up. */
+  @container usage (max-width: 640px) {
+    .tr,
+    .fable .tr {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 20px;
+    }
+    .fable .tr {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .acc {
+      grid-column: 1 / -1;
+    }
+    .th > div:first-child {
+      display: none;
+    }
+    .th {
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+  }
+  @container usage (max-width: 380px) {
+    .tr,
+    .fable .tr {
+      grid-template-columns: minmax(0, 1fr);
     }
     .span2,
     .span3 {
       grid-column: auto;
     }
-    .fable .tr {
-      grid-template-columns: 1fr;
-      gap: 10px;
+    .th {
+      display: none;
     }
-    .pair {
-      grid-template-columns: 1fr;
-      gap: 14px;
+    .tr :global(.lab.colhide) {
+      display: block;
+    }
+  }
+  /* The recommendation keeps its name on one line; numbers and button move under it. */
+  @container overview (max-width: 560px) {
+    .pick {
+      flex-wrap: wrap;
+      row-gap: 10px;
+    }
+    .pick .who {
+      flex: 1 1 calc(100% - 50px);
+    }
+    .stats {
+      flex: 1;
+      margin-left: 50px;
     }
   }
 </style>

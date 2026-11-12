@@ -6,6 +6,7 @@ import { api } from './api'
 import { deleteInstance, edit, launch, launchBestClaude, newInstance, openSettings, quitInstance, reveal, toggleFavorite } from './actions'
 import { t } from './i18n.svelte'
 import { keysOf } from './keymap.svelte'
+import { PAGES } from './pages'
 import { appName, dialogs, installationOf, run, settings, THEMES, ui, visibleInstances, type ThemeId } from './state.svelte'
 import type { Instance } from './types'
 import { bestClaude, mainOrg, windowsOf } from './usage'
@@ -50,18 +51,6 @@ export const THEME_LABEL: Record<ThemeId, () => string> = {
   midnight: () => 'Midnight',
   black: () => t('완전 검정'),
 }
-
-const SETTINGS_TABS: { id: string; label: () => string }[] = [
-  { id: 'general', label: () => t('일반') },
-  { id: 'appearance', label: () => t('모양') },
-  { id: 'launcher', label: () => t('런처') },
-  { id: 'shortcuts', label: () => t('단축키') },
-  { id: 'taskbar', label: () => t('작업 표시줄') },
-  { id: 'usage', label: () => t('사용량') },
-  { id: 'apps', label: () => t('앱 관리') },
-  { id: 'data', label: () => t('데이터') },
-  { id: 'about', label: () => t('정보') },
-]
 
 function who(inst: Instance): string {
   const app = appName(inst)
@@ -123,7 +112,7 @@ export function commands(where: 'main' | 'quick'): Cmd[] {
   out.push(
     { id: 'new', group: 'actions', title: t('새 인스턴스'), icon: 'plus', shortcut: keysOf('newInstance'), run: () => newInstance() },
     { id: 'addApp', group: 'actions', title: t('앱 추가…'), icon: 'layers', query: true, keywords: ['app', 'install'], run: () => (where === 'main' ? (dialogs.addApp = true) : openSettings('apps')) },
-    { id: 'floatSettings', group: 'actions', title: t('플로팅 바 설정'), icon: 'float', query: true, keywords: ['float', 'floating', 'magnet'], run: () => openSettings('launcher') },
+    { id: 'floatSettings', group: 'actions', title: t('플로팅 바 설정'), icon: 'float', query: true, keywords: ['float', 'floating', 'magnet'], run: () => openSettings('float') },
     s.floatDocked
       ? { id: 'floatUndock', group: 'actions', title: t('플로팅 바를 작업 표시줄에서 떼기'), icon: 'float', query: true, keywords: ['float', 'taskbar', 'dock'], run: () => api.floatUndock() }
       : {
@@ -155,8 +144,8 @@ export function commands(where: 'main' | 'quick'): Cmd[] {
       run: () => run(api.updateSettings({ theme: th })),
     })
   }
-  for (const tab of SETTINGS_TABS) {
-    out.push({ id: `settings:${tab.id}`, group: 'settings', title: `${t('설정')} › ${tab.label()}`, icon: 'settings', query: true, run: () => openSettings(tab.id) })
+  for (const p of PAGES.filter((p) => p.id !== 'instances')) {
+    out.push({ id: `settings:${p.id}`, group: 'settings', title: `${t('설정')} › ${p.label()}`, icon: p.icon, query: true, run: () => openSettings(p.id) })
   }
   return out
 }

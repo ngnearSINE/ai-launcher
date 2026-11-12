@@ -7,7 +7,7 @@
   import { usageInstances } from '../lib/sidebar.svelte'
   import { dialogs, installationOf, run, settings, ui, visibleInstances } from '../lib/state.svelte'
   import type { Instance } from '../lib/types'
-  import { bestClaude, mainOrg, usageErrorText, windowsOf } from '../lib/usage'
+  import { bestClaude, mainOrg, scopedOf, usageErrorText, windowsOf } from '../lib/usage'
   import Icon from '../components/Icon.svelte'
   import StatusBadge from '../components/StatusBadge.svelte'
   import UsageWindow from '../components/UsageWindow.svelte'
@@ -17,6 +17,9 @@
   const accounts = $derived(usageInstances())
   const running = $derived(all.filter((i) => i.running))
   const best = $derived(accounts.length > 1 ? bestClaude(all, s) : undefined)
+  // Per-model allowance shown as its own column (the floating bar keeps to 5-hour / weekly).
+  const FABLE = /fable/i
+  const hasFable = $derived(accounts.some((a) => scopedOf(mainOrg(a), s, FABLE)))
   const bestWins = $derived(best ? windowsOf(mainOrg(best), s) : null)
 
   function open(inst: Instance) {
@@ -62,9 +65,10 @@
     {#if accounts.length}
       <section>
         <h2>{t('계정별 사용량')}</h2>
-        <div class="table" role="table">
+        <div class="table" class:fable={hasFable} role="table">
           {#each accounts as a (a.id)}
             {@const w = windowsOf(mainOrg(a), s)}
+            {@const fable = scopedOf(mainOrg(a), s, FABLE)}
             <div class="tr" role="row" tabindex="0" onclick={() => open(a)} onkeydown={(e) => e.key === 'Enter' && open(a)}>
               <div class="acc" role="cell">
                 <StatusBadge inst={a} size={24} />
@@ -76,8 +80,9 @@
               {#if w.w5 || w.ww}
                 <div role="cell">{#if w.w5}<UsageWindow q={w.w5.q} />{/if}</div>
                 <div role="cell">{#if w.ww}<UsageWindow q={w.ww.q} />{/if}</div>
+                {#if hasFable}<div role="cell">{#if fable}<UsageWindow q={fable.q} />{/if}</div>{/if}
               {:else}
-                <div class="span2 muted small" role="cell">{a.usage?.error ? usageErrorText(a.usage.error) : t('불러오는 중…')}</div>
+                <div class="span2 muted small" class:span3={hasFable} role="cell">{a.usage?.error ? usageErrorText(a.usage.error) : t('불러오는 중…')}</div>
               {/if}
             </div>
           {/each}
@@ -186,6 +191,13 @@
     padding: 12px 16px;
     outline: none;
   }
+  .fable .tr {
+    grid-template-columns: minmax(180px, 1.1fr) 1fr 1fr 1fr;
+    gap: 24px;
+  }
+  .span3 {
+    grid-column: span 3;
+  }
   .tr + .tr {
     border-top: 1px solid var(--line);
   }
@@ -267,8 +279,13 @@
       grid-template-columns: 1fr;
       gap: 10px;
     }
-    .span2 {
+    .span2,
+    .span3 {
       grid-column: auto;
+    }
+    .fable .tr {
+      grid-template-columns: 1fr;
+      gap: 10px;
     }
     .pair {
       grid-template-columns: 1fr;

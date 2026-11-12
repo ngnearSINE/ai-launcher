@@ -101,9 +101,6 @@
       <Row label={t('컴퓨터를 켤 때 런처 시작')} desc={t('트레이에서 조용히 시작해요')}>
         <Switch checked={s.startWithOs} onchange={(v) => set('startWithOs', v)} />
       </Row>
-      <Row label={t('창을 닫으면 트레이로')} desc={t('끄면 창을 닫을 때 런처도 끝나요(실행 중인 앱은 그대로)')}>
-        <Switch checked={s.closeToTray} onchange={(v) => set('closeToTray', v)} />
-      </Row>
       <Row label={t('이미 실행 중이면 앞으로 가져오기')} desc={t('끄면 실행을 누를 때마다 앱에 다시 실행 요청을 보내요')}>
         <Switch checked={s.focusIfRunning} onchange={(v) => set('focusIfRunning', v)} />
       </Row>
@@ -154,24 +151,11 @@
       <Row label={t('트레이 아이콘 더블클릭')} desc={t('더블클릭을 쓰면 한 번 클릭은 더블클릭 간격만큼 기다렸다 동작해요')}>
         <Segmented value={s.trayDoubleClick} onchange={(v) => set('trayDoubleClick', v)} options={[{ value: 'main', label: t('관리 창') }, { value: 'quick', label: t('빠른 실행') }, { value: 'none', label: t('사용 안 함') }]} />
       </Row>
-      <h2>{t('플로팅 런처')}</h2>
+      <h2>{t('플로팅 바')}</h2>
       <div class="tip">
         <Icon name="float" size={14} />
-        <span
-          >{s.minimizeToFloat
-            ? t('런처 창을 최소화하거나 단축키를 누르면 플로팅으로 전환해요. 플로팅에서는 위쪽 ↗ 단추나 빈 곳 더블클릭으로 런처 창에 돌아와요.')
-            : t('런처 창 제목줄의 플로팅 단추나 단축키로 언제든 전환해요. 플로팅에서는 위쪽 ↗ 단추나 빈 곳 더블클릭으로 런처 창에 돌아와요.')}</span
-        >
+        <span>{t('런처가 켜져 있는 동안 늘 떠 있어요. 긴 옆면을 끌면 아이콘 크기만, 양 끝을 끌면 보이는 칸 수만 바뀌고, 모서리는 둘 다 바꿔요. 넘치는 아이콘은 휠로 넘겨요. 작업 표시줄에 끌어다 놓으면 가로로 붙어요.')}</span>
       </div>
-      <Row label={t('최소화하면 플로팅으로 전환')} desc={t('끄면 보통 최소화가 되고, 제목줄에 플로팅 전환 단추가 생겨요')}>
-        <Switch checked={s.minimizeToFloat} onchange={(v) => set('minimizeToFloat', v)} />
-      </Row>
-      <Row label={t('플로팅 런처 표시')} desc={t('화면 가장자리에 떠 있는 작은 아이콘 줄')}>
-        <Switch checked={s.floatEnabled} onchange={(v) => set('floatEnabled', v)} />
-      </Row>
-      <Row label={t('전환할 때')} desc={t('「한쪽만 보이기」는 한쪽을 열면 다른 쪽을 숨겨요')}>
-        <Segmented value={s.floatSwitch} onchange={(v) => set('floatSwitch', v)} options={[{ value: 'swap', label: t('한쪽만 보이기') }, { value: 'both', label: t('둘 다 두기') }]} />
-      </Row>
       <Row label={t('사용량 고리')} desc={t('「둘 다」는 바깥 고리가 주간, 안쪽 고리가 5시간이에요. 흰 눈금은 고르게 썼을 때의 위치예요.')} stack>
         <Segmented
           value={s.floatRing}
@@ -185,17 +169,38 @@
           ]}
         />
       </Row>
-      <Row label={t('방향')}>
+      {#if s.floatDocked}
+        <Row label={t('작업 표시줄에 붙어 있어요')} desc={t('손잡이를 좌우로 끌면 옮겨지고 아이콘·위젯·알림 영역에 붙어요. 작업 표시줄 밖으로 끌어내면 놓을 자리가 미리 보이고, 놓으면 떨어져요')}>
+          <button class="btn sm" onclick={() => api.floatUndock()}>{t('떼기')}</button>
+        </Row>
+        <Row label={t('작업 표시줄에서 보이는 칸')} desc={s.floatDockSlots ? t('{n}칸 · 양 끝을 끌어도 바뀌어요', { n: s.floatDockSlots }) : t('자동 · 양 끝을 끌어도 바뀌어요')}>
+          <button class="btn sm" disabled={!s.floatDockSlots} onclick={() => set('floatDockSlots', 0)}>{t('자동')}</button>
+        </Row>
+      {/if}
+      <Row label={t('방향')} desc={t('플로팅 바 손잡이를 우클릭해도 바꿀 수 있어요')}>
         <Segmented value={s.floatOrientation} onchange={(v) => set('floatOrientation', v)} options={[{ value: 'vertical', label: t('세로') }, { value: 'horizontal', label: t('가로') }]} />
       </Row>
-      <Row label={t('아이콘 크기')} desc={`${s.floatSize}px`}>
-        <input type="range" min="28" max="72" value={s.floatSize} onchange={(e) => set('floatSize', +(e.target as HTMLInputElement).value)} />
+      <Row label={t('크기')} desc={`${Math.round((s.floatSize / 44) * 100)}% · ${t('모서리를 끌어도 바뀌어요')}`}>
+        <input type="range" min="28" max="220" value={s.floatSize} onchange={(e) => set('floatSize', +(e.target as HTMLInputElement).value)} />
+      </Row>
+      <Row label={t('보이는 칸')} desc={s.floatSlots ? t('{n}칸 · 위·아래 끝을 끌어도 바뀌어요', { n: s.floatSlots }) : t('모두 · 위·아래 끝을 끌어도 바뀌어요')}>
+        <button class="btn sm" disabled={!s.floatSlots} onclick={() => set('floatSlots', 0)}>{t('모두 보이기')}</button>
       </Row>
       <Row label={t('불투명도')} desc={`${s.floatOpacity}%`}>
         <input type="range" min="30" max="100" value={s.floatOpacity} onchange={(e) => set('floatOpacity', +(e.target as HTMLInputElement).value)} />
       </Row>
       <Row label={t('항상 위에')}>
         <Switch checked={s.floatAlwaysOnTop} onchange={(v) => set('floatAlwaysOnTop', v)} />
+      </Row>
+      <h2>{t('마그넷')}</h2>
+      <Row label={t('가장자리에 붙이기')} desc={t('끌어서 옮길 때 화면 가장자리에 착 붙어요')}>
+        <Switch checked={s.floatSnapEdges} onchange={(v) => set('floatSnapEdges', v)} />
+      </Row>
+      <Row label={t('다른 창에도 붙이기')} desc={t('열려 있는 창의 가장자리에도 붙어요')}>
+        <Switch checked={s.floatSnapWindows} disabled={!s.floatSnapEdges} onchange={(v) => set('floatSnapWindows', v)} />
+      </Row>
+      <Row label={t('붙는 거리')} desc={`${s.floatSnapDistance}px`}>
+        <input type="range" min="4" max="32" value={s.floatSnapDistance} disabled={!s.floatSnapEdges} onchange={(e) => set('floatSnapDistance', +(e.target as HTMLInputElement).value)} />
       </Row>
       <Row label={t('위치 초기화')}>
         <button class="btn sm" onclick={() => set('floatPosition', null)}>{t('초기화')}</button>
@@ -208,7 +213,7 @@
         <HotkeyInput value={s.quickHotkey} onchange={(v) => set('quickHotkey', v)} />
         <Switch checked={s.quickHotkeyEnabled} onchange={(v) => set('quickHotkeyEnabled', v)} />
       </Row>
-      <Row label={t('런처 창 ⇄ 플로팅')}>
+      <Row label={t('상세 창 열기/닫기')}>
         <HotkeyInput value={s.floatHotkey} onchange={(v) => set('floatHotkey', v)} />
         <Switch checked={s.floatHotkeyEnabled} onchange={(v) => set('floatHotkeyEnabled', v)} />
       </Row>

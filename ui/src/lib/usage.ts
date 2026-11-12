@@ -136,6 +136,12 @@ export function mainOrg(inst: Instance): OrgUsage | undefined {
   return visibleOrgs(inst)[0]
 }
 
+/** A model-specific weekly window (e.g. Fable) by its label, as a `Win`. */
+export function scopedOf(org: OrgUsage | undefined, s: Settings, name: RegExp): Win | undefined {
+  const q = org?.quotas.find((q) => q.kind === 'scoped' && name.test(q.label))
+  return q ? win(q, s) : undefined
+}
+
 export function windowsOf(org: OrgUsage | undefined, s: Settings) {
   const w5 = org?.quotas.find((q) => q.kind === 'fiveHour')
   const ww = org?.quotas.find((q) => q.kind === 'weekly')

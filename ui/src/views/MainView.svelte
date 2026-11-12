@@ -22,10 +22,9 @@
   import Overview from './Overview.svelte'
 
   const win = getCurrentWindow()
-  const snap = $derived(ui.snap!)
   const selected = $derived(instanceById(ui.selected))
   const rail = $derived(ui.railPinned || ui.narrow)
-  const floatKey = $derived(snap.settings.floatHotkeyEnabled ? ` (${snap.settings.floatHotkey})` : '')
+  const update = $derived(ui.snap?.update ?? { status: 'idle' as const })
 
   function measure() {
     ui.narrow = innerWidth < 840
@@ -121,24 +120,19 @@
       {/if}
       {#if !rail || ui.view === 'settings'}<img src="/icon.png" alt="" /><span data-tauri-drag-region>{t('AI 런처')}</span>{/if}
     </div>
-    <div class="mid" data-tauri-drag-region>
-      <button class="trigger" onclick={() => (ui.palette = true)} aria-label={t('명령 팔레트')}>
-        <Icon name="search" size={14} />
-        <span class="ph">{t('인스턴스나 명령 검색')}</span>
-        <span class="kbd">Ctrl</span><span class="kbd">K</span>
-      </button>
-    </div>
+    <div class="mid" data-tauri-drag-region></div>
     <div class="right" data-tauri-drag-region>
-      {#if !snap.settings.minimizeToFloat}
-        <button class="icon-btn" title={t('플로팅 런처로 전환') + floatKey} aria-label={t('플로팅 런처로 전환')} onclick={() => run(api.switchView('float'))}><Icon name="float" size={17} /></button>
+      {#if update.status === 'ready'}
+        <button class="upd ready" title={t('다시 시작해 {v}(으)로 업데이트', { v: update.version })} onclick={() => run(api.installUpdate())}>
+          <Icon name="refresh" size={13} /><span>{t('업데이트 {v}', { v: update.version })}</span>
+        </button>
+      {:else if update.status === 'downloading'}
+        <span class="upd" title={t('{v} 받는 중', { v: update.version })}><span class="ring" style:--p={update.percent}></span><span>{t('업데이트 받는 중')}</span></span>
+      {:else if update.status === 'installing'}
+        <span class="upd"><span class="ring spin"></span><span>{t('업데이트 설치 중')}</span></span>
       {/if}
       <div class="winctl">
-        {#if snap.settings.minimizeToFloat}
-          <!-- Straight to the floating launcher, without the OS minimise animation first. -->
-          <button aria-label={t('최소화해서 플로팅으로 전환')} title={t('최소화해서 플로팅으로 전환') + floatKey} onclick={() => run(api.switchView('float'))}><Icon name="minus" size={14} /></button>
-        {:else}
-          <button aria-label={t('최소화')} onclick={() => win.minimize()}><Icon name="minus" size={14} /></button>
-        {/if}
+        <button aria-label={t('최소화')} onclick={() => win.minimize()}><Icon name="minus" size={14} /></button>
         <button aria-label={t('최대화')} onclick={() => win.toggleMaximize()}><Icon name="square" size={12} /></button>
         <button class="close" aria-label={t('닫기')} onclick={() => win.close()}><Icon name="x" size={15} /></button>
       </div>
@@ -203,26 +197,46 @@
     justify-content: center;
     padding: 0 12px;
   }
-  .trigger {
-    width: min(420px, 100%);
-    display: flex;
+  /* Update pill: quiet while downloading, accent when it only needs a restart. */
+  .upd {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    height: 28px;
-    padding: 0 6px 0 10px;
-    border-radius: var(--r-md);
+    gap: 6px;
+    height: 24px;
+    padding: 0 10px 0 8px;
+    margin-right: 4px;
     border: 1px solid var(--line);
-    background: color-mix(in srgb, var(--s0) 55%, transparent);
-    color: var(--text-3);
-    font-size: var(--fs-12);
-  }
-  .trigger:hover {
-    border-color: var(--line-strong);
+    border-radius: 999px;
+    background: transparent;
     color: var(--text-2);
+    font-size: var(--fs-12);
+    white-space: nowrap;
   }
-  .ph {
-    flex: 1;
-    text-align: left;
+  .upd.ready {
+    border-color: transparent;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter var(--dur) var(--ease);
+  }
+  .upd.ready:hover {
+    filter: brightness(1.08);
+  }
+  .upd .ring {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: conic-gradient(var(--accent) calc(var(--p, 25) * 1%), var(--line) 0);
+    mask: radial-gradient(circle, transparent 3.5px, #000 4px);
+  }
+  .upd .ring.spin {
+    animation: spin 900ms linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .right {
     display: flex;

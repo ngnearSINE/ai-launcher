@@ -12,7 +12,7 @@
   import { createSortable, mergeOrder } from '../lib/sortable.svelte'
   import { dialogs, installationOf, run, settings, ui } from '../lib/state.svelte'
   import type { Instance, Settings as S } from '../lib/types'
-  import { isLaunching, needsText, shortLeft, statusOf } from '../lib/usage'
+  import { isLaunching, levelOf, mainOrg, needsText, shortLeft, statusOf, windowsOf } from '../lib/usage'
   import Icon from './Icon.svelte'
   import StatusBadge from './StatusBadge.svelte'
 
@@ -73,7 +73,7 @@
       {#if !fold[sec.id] || rail}
         {#each sorter.arrange(sec.items, (i) => i.id) as inst (inst.id)}
           {@const idx = order.indexOf(inst)}
-          {@const u = shortLeft(inst, s)}
+          {@const w = windowsOf(mainOrg(inst), s)}
           {@const st = statusOf(inst, s)}
           <div
             class="row"
@@ -107,8 +107,11 @@
                   <span class="faint small">{t('여는 중')}</span>
                 {:else if st === 'needs'}
                   <span class="small st-warn">{t('확인')}</span>
-                {:else if s.sidebarShowUsage && u.text}
-                  <span class="pct num {u.level}">{u.text}</span>
+                {:else if (s.sidebarShow5h && w.w5) || (s.sidebarShowWeekly && w.ww)}
+                  <span class="uses num">
+                    {#if s.sidebarShow5h && w.w5}<span class="u {levelOf(w.w5, s)}" title={t('5시간')}><i>5h</i>{Math.round(w.w5.shown)}</span>{/if}
+                    {#if s.sidebarShowWeekly && w.ww}<span class="u {levelOf(w.ww, s)}" title={t('주간')}><i>{t('주')}</i>{Math.round(w.ww.shown)}</span>{/if}
+                  </span>
                 {/if}
               </span>
               <span class="hover">
@@ -167,7 +170,7 @@
     <div class="display" role="dialog" aria-label={t('표시')}>
       <div class="d-lab">{t('묶기')}</div>
       <div class="seg">
-        {#each [['status', t('상태')], ['app', t('앱')], ['group', t('그룹')], ['none', t('없음')]] as [v, l] (v)}
+        {#each [['none', t('없음')], ['status', t('상태')], ['app', t('앱')], ['group', t('그룹')]] as [v, l] (v)}
           <button class:on={s.sidebarGroup === v} onclick={() => set('sidebarGroup', v as S['sidebarGroup'])}>{l}</button>
         {/each}
       </div>
@@ -181,7 +184,8 @@
       {#if s.sort === 'manual' && s.sidebarGroup !== 'none'}<p class="hint">{t('끌어서 순서를 바꾸려면 「묶기: 없음」으로 두세요')}</p>{/if}
       <div class="d-lab">{t('행에 보이기')}</div>
       <label class="chk"><input type="checkbox" checked={s.sidebarShowAccount} onchange={(e) => set('sidebarShowAccount', (e.target as HTMLInputElement).checked)} /> {t('계정')}</label>
-      <label class="chk"><input type="checkbox" checked={s.sidebarShowUsage} onchange={(e) => set('sidebarShowUsage', (e.target as HTMLInputElement).checked)} /> {t('남은 사용량')}</label>
+      <label class="chk"><input type="checkbox" checked={s.sidebarShowWeekly} onchange={(e) => set('sidebarShowWeekly', (e.target as HTMLInputElement).checked)} /> {t('주간 사용량')}</label>
+      <label class="chk"><input type="checkbox" checked={s.sidebarShow5h} onchange={(e) => set('sidebarShow5h', (e.target as HTMLInputElement).checked)} /> {t('5시간 사용량')}</label>
     </div>
   {/if}
 </aside>
@@ -337,14 +341,22 @@
   .st-warn {
     color: var(--st-warn);
   }
-  .pct {
+  /* "5h 93  주 44": small faint labels, numbers in the level's colour. */
+  .uses {
+    display: flex;
+    gap: 8px;
     font-size: var(--fs-12);
+    color: var(--text-2);
+  }
+  .u i {
+    font-style: normal;
+    margin-right: 2px;
     color: var(--text-3);
   }
-  .pct.warn {
+  .u.warn {
     color: var(--st-warn);
   }
-  .pct.crit {
+  .u.crit {
     color: var(--st-crit);
   }
   /* Hover actions sit over the trailing info on a fade, so the row never reflows. */

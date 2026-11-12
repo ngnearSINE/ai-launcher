@@ -4,12 +4,12 @@ Run several accounts of Claude Desktop and other AI apps side by side, on Window
 
 - **One instance per account** — each instance has its own data folder, so sign-ins never mix.
 - **Pin each one separately** (Windows) — every instance gets its own taskbar button; a pinned button starts exactly that instance.
-- **Sidebar and overview** — instances grouped by status (needs attention, running low, running, idle) with pinned ones on top; the overview shows the best Claude account to use now and usage per account; an instance's page shows its usage, memory and folder.
+- **Sidebar and overview** — pinned instances on top, each row with its 5-hour and weekly usage; group by status or app if you like. The overview shows the best Claude account to use now and usage per account (5-hour, weekly, Fable); an instance's page shows its usage, memory and folder. An available update shows in the title bar.
 - **Usage** — Claude 5-hour, weekly, per-model (e.g. Fable) and credit usage with time to reset, and a notification naming an account with room when one runs low. Read **only from that instance's own sign-in**.
 - **Command palette** — `Ctrl+K` finds any instance or command; the tray quick launch is the same list. Press `?` for every shortcut (remappable in Settings → Shortcuts).
 - **Auto-detect + add by path** — Claude, Orca, Cursor, Poe and Grok Bot in their default locations, plus AI web apps installed from Chrome, are registered automatically; anything else can be added by path.
 - **Web apps** — web apps you installed from Chrome (Gemini, Grok…) open as the default instance with your usual profile; other accounts get app windows with their own browser data folder. Chrome and Edge themselves are not shown as cards.
-- **Quick launch, tray and floating launcher** — global hotkey (`Alt+Shift+Space`) → type → Enter; launch from the tray menu; or switch to an always-on-top icon strip with usage rings (minimise the launcher window — or the title-bar button if you turn that off — or `Alt+Shift+F`).
+- **Quick launch, tray and floating bar** — global hotkey (`Alt+Shift+Space`) → type → Enter, or launch from the tray menu. While the launcher runs an always-on-top icon strip with usage rings stays on screen and snaps to screen and window edges as you drag it. Drag a corner to resize it, an end to show more or fewer icons (scroll for the rest); right-click an icon to hide it (bring it back from the main window). Drop it on the taskbar to dock it there horizontally; drag its handle to take it out. Switch horizontal / vertical from its right-click menu. The button at the bottom or `Alt+Shift+F` opens and closes the main window.
 
 ## Supported apps
 

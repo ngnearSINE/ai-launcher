@@ -153,6 +153,8 @@ async fn tick(core: &Arc<Core>) {
                     e.next_at = now + chrono::Duration::seconds(refresh.max(MIN_INTERVAL_SECS));
                 }
                 Err(err) => {
+                    // Kept short: the reason only (never a token or an address).
+                    log::info!("usage {id}: {err:?}");
                     let wait = match err {
                         UsageError::RateLimited(s) => {
                             e.strikes += 1;
@@ -214,7 +216,7 @@ fn alerts(core: &Core, id: &str) {
         let prev = SEEN.lock().insert((seen_key.clone(), kind), (crit, q.resets_at));
         let Some((was_crit, was_reset)) = prev else { continue };
         let window = crate::i18n::t(lang, wkey);
-        if crit && (!was_crit || was_reset != q.resets_at) && s.notify_low {
+        if crit && (!was_crit || !same_reset(was_reset, q.resets_at)) && s.notify_low {
             let left = (100.0 - q.used_percent).max(0.0).round();
             let reset = q.resets_at.map(|r| until_text(lang, r)).unwrap_or_default();
             let mut body = tr("notify.low.body", &[("left", left.to_string()), ("reset", reset)]);
@@ -222,9 +224,20 @@ fn alerts(core: &Core, id: &str) {
                 body = format!("{body}\n{}", tr("notify.low.suggest", &[("name", name), ("left", room.to_string())]));
             }
             notify(core, &tr("notify.low.title", &[("name", inst.alias.clone()), ("window", window)]), &body);
-        } else if !crit && was_crit && was_reset != q.resets_at && s.notify_reset {
+        } else if !crit && was_crit && !same_reset(was_reset, q.resets_at) && s.notify_reset {
             notify(core, &tr("notify.reset.title", &[("name", inst.alias.clone()), ("window", window)]), &crate::i18n::t(lang, "notify.reset.body"));
         }
+    }
+}
+
+/// Whether two reset times belong to the same window. The service reports the same reset with
+/// a slightly different fraction of a second on every read, so exact comparison made a "running
+/// low" notice repeat on every refresh (seen 2026-11-12); windows are hours apart.
+fn same_reset(a: Option<DateTime<Utc>>, b: Option<DateTime<Utc>>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => (a - b).num_minutes().abs() < 10,
+        (None, None) => true,
+        _ => false,
     }
 }
 
@@ -288,4 +301,18 @@ pub fn refresh_now(core: &Core, id: Option<&str>) {
         }
     }
     core.usage_wake.notify_one();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn jitter_in_reset_time_is_the_same_window() {
+        let t = |s: &str| Some(DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc));
+        assert!(same_reset(t("2026-11-12T03:00:00.086636Z"), t("2026-11-12T03:00:00.323816Z")));
+        assert!(same_reset(t("2026-11-12T05:19:59.771224Z"), t("2026-11-12T05:20:00.006777Z")));
+        assert!(!same_reset(t("2026-11-12T03:00:00Z"), t("2026-11-12T08:00:00Z")));
+        assert!(!same_reset(t("2026-11-12T03:00:00Z"), None));
+    }
 }

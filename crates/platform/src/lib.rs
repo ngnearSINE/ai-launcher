@@ -3,7 +3,9 @@
 
 pub mod badge;
 pub mod command;
+pub mod dock_slot;
 pub mod process;
+pub mod snap;
 
 pub use command::host_command;
 

@@ -123,8 +123,18 @@ export async function copyText(text: string, done: string) {
 }
 
 /** Right-click / ⋯ menu for an instance. `compact` drops the editing entries (quick/float). */
+/** Shows or hides the instance on the floating strip (the main window can always bring it back). */
+export function setHiddenInFloat(inst: Instance, hidden: boolean) {
+  run(api.updateInstance(inst.id, { advanced: { ...inst.advanced, hiddenInFloat: hidden } }), hidden ? t('플로팅에서 숨겼어요') : t('플로팅에 다시 표시해요'))
+}
+
 export function instanceMenu(e: MouseEvent, inst: Instance, compact = false) {
   e.preventDefault()
+  openMenu(e, instanceMenuItems(inst, compact))
+}
+
+/** The instance menu's items: full in the main window, `compact` on the quick panel / float. */
+export function instanceMenuItems(inst: Instance, compact = false): MenuItem[] {
   const install = installationOf(inst)
   const items: MenuItem[] = [
     inst.running
@@ -139,6 +149,11 @@ export function instanceMenu(e: MouseEvent, inst: Instance, compact = false) {
     items.push(
       { label: t('편집…'), icon: 'sliders', hint: 'F2', action: () => edit(inst) },
       { label: inst.favorite ? t('고정 해제') : t('위에 고정'), icon: 'pin', hint: 'Ctrl+Shift+P', action: () => toggleFavorite(inst) },
+      {
+        label: inst.advanced.hiddenInFloat ? t('플로팅에 다시 표시') : t('플로팅에서 숨기기'),
+        icon: inst.advanced.hiddenInFloat ? 'eye' : 'eye-off',
+        action: () => setHiddenInFloat(inst, !inst.advanced.hiddenInFloat),
+      },
       { label: t('복제'), icon: 'copy', action: () => run(api.duplicateInstance(inst.id), t('복제했어요')) },
       { sep: true },
     )
@@ -162,7 +177,7 @@ export function instanceMenu(e: MouseEvent, inst: Instance, compact = false) {
   } else {
     items.push({ sep: true }, { label: t('편집…'), icon: 'sliders', action: () => edit(inst) })
   }
-  openMenu(e, items)
+  return items
 }
 
 export function newInstance(installationId?: string) {

@@ -10,6 +10,8 @@
     value: number
     paceAt: number | null
     level: '' | 'warn' | 'crit'
+    /** Nothing left in this window: its track turns into a dashed red ring. */
+    empty?: boolean
   }
   let { inst, size = 40, rings = [] }: { inst: Instance; size?: number; rings?: Ring[] } = $props()
 
@@ -40,7 +42,7 @@
       {#each rings as r, i (i)}
         {@const rad = radius(i)}
         {@const end = A0 + SWEEP * Math.max(0.001, Math.min(100, r.value) / 100)}
-        <path d={arc(rad, A0, A0 + SWEEP)} class="track" stroke-width={stroke} />
+        <path d={arc(rad, A0, A0 + SWEEP)} class="track" class:empty={r.empty} stroke-width={stroke} />
         <path d={arc(rad, A0, end)} class="val {r.level}" class:inner={i > 0} stroke-width={stroke} />
         {#if r.paceAt !== null}
           {@const pa = A0 + (SWEEP * Math.max(0, Math.min(100, r.paceAt))) / 100}
@@ -122,6 +124,11 @@
   }
   .track {
     stroke: var(--track);
+  }
+  .track.empty {
+    stroke: color-mix(in srgb, var(--crit) 70%, transparent);
+    stroke-dasharray: 2.4 3.6;
+    stroke-linecap: butt;
   }
   .val {
     stroke: var(--ring, var(--accent));

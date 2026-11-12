@@ -85,12 +85,13 @@ export function visibleOrgs(inst: Instance) {
 
 /** Every instance the user can see (hidden apps and undoable deletes left out), in the
  *  chosen sort order. The sidebar, the floating launcher and the palette all start here. */
-export function visibleInstances(opts: { forQuick?: boolean } = {}): Instance[] {
+export function visibleInstances(opts: { forQuick?: boolean; forFloat?: boolean } = {}): Instance[] {
   const s = ui.snap
   if (!s) return []
   let list = s.instances.filter((i) => {
     if (ui.pendingDelete.includes(i.id)) return false
     if (opts.forQuick && i.advanced.hiddenInQuick) return false
+    if (opts.forFloat && i.advanced.hiddenInFloat) return false
     return !installationOf(i)?.hidden
   })
   const sort = s.settings.sort

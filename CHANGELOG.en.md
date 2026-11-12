@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+The window is laid out like a settings window, and Cursor and Grok Bot usage now shows.
+
+- A rail on the left switches between instances, floating bar, usage, shortcuts, taskbar, appearance, app management and general pages. Floating bar settings are gathered on one page
+- Cursor (this month's limit) and Grok Bot (weekly limit) usage, read with that instance's own sign-in, shows in the sidebar, overview and floating bar
+- Instances carry their colour dot in the sidebar and on the floating bar
+- Overview: the suggested account fits on one line (status, name, what's left, open), and the account table has a header row so each cell shows just the number. When the table gets narrow, account names move above their numbers
+- Usage bars are grey by default and only take colour when running low. Settings → Usage → "Bar colour" switches back to the accent colour
+- A run-out warning inside the table is kept to one short line; hover for the full sentence
+- When Claude briefly refuses usage requests, the last numbers stay on screen, and they show straight away after a restart
+- Fixed: the settings scroll bar not reaching the window edge, and an account name shown twice when it matches the alias
+
 ## 0.3.0
 
 A reworked floating bar that can also live in the taskbar.

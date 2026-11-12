@@ -117,7 +117,7 @@ async fn float_resize(app: AppHandle, core: State<'_, Arc<Core>>, dir: String) -
     }
     #[cfg(not(windows))]
     {
-        use tauri::window::ResizeDirection as D;
+        use tauri_runtime::ResizeDirection as D;
         let d = match dir.as_str() {
             "North" => D::North,
             "NorthEast" => D::NorthEast,
@@ -129,7 +129,7 @@ async fn float_resize(app: AppHandle, core: State<'_, Arc<Core>>, dir: String) -
             _ => D::East,
         };
         let _ = core;
-        let _ = w.start_resize_dragging(d);
+        let _ = AsRef::<tauri::Webview<_>>::as_ref(&w).window().start_resize_dragging(d);
     }
     Ok(())
 }

@@ -56,7 +56,6 @@ fn menu(app: &AppHandle, core: &Core) -> tauri::Result<Menu<Wry>> {
         let text = if *running { format!("● {label}") } else { format!("    {label}") };
         sub = sub.item(&MenuItem::with_id(app, format!("inst:{id}"), text, true, None::<&str>)?);
     }
-    let float_label = if settings.float_enabled { t(l, "float.hide") } else { t(l, "float.show") };
     let mut builder = MenuBuilder::new(app);
     if let UpdateState::Ready { version, .. } = &*core.update.lock() {
         builder = builder
@@ -69,7 +68,6 @@ fn menu(app: &AppHandle, core: &Core) -> tauri::Result<Menu<Wry>> {
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&sub.build()?)
         .item(&PredefinedMenuItem::separator(app)?)
-        .item(&MenuItem::with_id(app, "float", float_label, true, None::<&str>)?)
         .item(&MenuItem::with_id(app, "settings", t(l, "settings"), true, None::<&str>)?)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItem::with_id(app, "quit", t(l, "quit"), true, None::<&str>)?)
@@ -155,14 +153,6 @@ fn on_menu(app: &AppHandle, id: &str) {
             crate::windows::show_main(app);
             use tauri::Emitter;
             let _ = app.emit("navigate", "settings");
-        }
-        "float" => {
-            let on = !core.settings().float_enabled;
-            let _ = core.mutate(true, |d| {
-                d.settings.float_enabled = on;
-                Ok(())
-            });
-            crate::windows::sync_float(app, &core);
         }
         "quit" => app.exit(0),
         "update" => {

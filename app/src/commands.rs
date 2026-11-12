@@ -49,34 +49,100 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         import_catalog,
         show_window,
         hide_window,
-        set_float,
         launch_best_claude,
         quit_app,
         app_icons,
         check_update,
         install_update,
         add_installed_web_app,
-        switch_view,
         fit_float,
+        float_undock,
+        float_resize,
+        float_grab,
     ]
 }
 
-/// The floating launcher's size for its content, kept on screen (logical px).
+/// Pulls the floating strip out of the taskbar (`drag`: it follows the held mouse button).
 #[tauri::command]
-async fn fit_float(app: AppHandle, width: f64, height: f64) -> Res<()> {
-    if let Some(w) = app.get_webview_window("float") {
-        crate::windows::fit_float(&w, width, height);
+async fn float_undock(app: AppHandle, core: State<'_, Arc<Core>>) -> Res<()> {
+    #[cfg(windows)]
+    {
+        let (app2, core2) = (app.clone(), core.inner().clone());
+        let _ = app.run_on_main_thread(move || crate::dock::undock(&app2, &core2));
+    }
+    #[cfg(not(windows))]
+    let _ = (app, core);
+    Ok(())
+}
+
+/// The strip's handle was pressed: it moves with the mouse. Floating, Windows' own move loop
+/// (with the magnet); in the taskbar, along it (or out of it).
+#[tauri::command]
+async fn float_grab(app: AppHandle, core: State<'_, Arc<Core>>) -> Res<()> {
+    let Some(w) = app.get_webview_window("float") else { return Ok(()) };
+    #[cfg(windows)]
+    if let Ok(h) = w.hwnd() {
+        let hwnd = h.0 as isize;
+        if launcher_platform::win::dock::is_docked(hwnd) {
+            crate::dock::dock_drag(&app, core.inner());
+        } else {
+            let _ = app.run_on_main_thread(move || {
+                launcher_platform::win::magnet::begin_move(hwnd);
+            });
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = core;
+        let _ = w.start_dragging();
     }
     Ok(())
 }
 
-/// `to`: `float` or `main`. Async: it may create the floating window.
+/// Starts resizing the floating strip from the cursor (`dir`: `North` … `SouthEast`).
 #[tauri::command]
-async fn switch_view(app: AppHandle, core: State<'_, Arc<Core>>, to: String) -> Res<()> {
-    log::info!("switch view requested by the UI");
-    crate::windows::switch_view(&app, core.inner(), to == "float");
+async fn float_resize(app: AppHandle, core: State<'_, Arc<Core>>, dir: String) -> Res<()> {
+    let Some(w) = app.get_webview_window("float") else { return Ok(()) };
+    #[cfg(windows)]
+    if let Ok(h) = w.hwnd() {
+        let hwnd = h.0 as isize;
+        // In the taskbar the window's sizing loop does not work: the launcher follows the mouse.
+        if launcher_platform::win::dock::is_docked(hwnd) {
+            crate::dock::dock_resize(&app, core.inner(), &dir);
+            return Ok(());
+        }
+        let _ = app.run_on_main_thread(move || {
+            launcher_platform::win::magnet::begin_resize(hwnd, &dir);
+        });
+    }
+    #[cfg(not(windows))]
+    {
+        use tauri::window::ResizeDirection as D;
+        let d = match dir.as_str() {
+            "North" => D::North,
+            "NorthEast" => D::NorthEast,
+            "NorthWest" => D::NorthWest,
+            "South" => D::South,
+            "SouthEast" => D::SouthEast,
+            "SouthWest" => D::SouthWest,
+            "West" => D::West,
+            _ => D::East,
+        };
+        let _ = core;
+        let _ = w.start_resize_dragging(d);
+    }
     Ok(())
 }
+
+/// The floating strip's shape at 100 % (logical px); the launcher sizes the window from it.
+#[tauri::command]
+async fn fit_float(app: AppHandle, core: State<'_, Arc<Core>>, layout: crate::windows::FloatLayout) -> Res<()> {
+    if let Some(w) = app.get_webview_window("float") {
+        crate::windows::set_float_layout(&w, core.inner(), layout);
+    }
+    Ok(())
+}
+
 
 /// Adds an installed browser web app (from the Start menu) with its default instance.
 #[tauri::command]
@@ -552,16 +618,6 @@ async fn show_window(app: AppHandle, label: String) {
 #[tauri::command]
 fn hide_window(app: AppHandle, label: String) {
     crate::windows::hide(&app, &label);
-}
-
-#[tauri::command]
-async fn set_float(app: AppHandle, core: State<'_, Arc<Core>>, on: bool) -> Res<()> {
-    core.mutate(true, |d| {
-        d.settings.float_enabled = on;
-        Ok(())
-    })?;
-    crate::windows::sync_float(&app, &core);
-    Ok(())
 }
 
 #[tauri::command]

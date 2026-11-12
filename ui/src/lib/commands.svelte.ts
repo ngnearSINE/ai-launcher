@@ -120,19 +120,21 @@ export function commands(where: 'main' | 'quick'): Cmd[] {
     for (const o of ops) out.push({ ...o, group: 'instanceOps', query: true, keywords: [inst.alias, appName(inst)] })
   }
 
-  const floatOn = s.floatEnabled
   out.push(
     { id: 'new', group: 'actions', title: t('새 인스턴스'), icon: 'plus', shortcut: keysOf('newInstance'), run: () => newInstance() },
     { id: 'addApp', group: 'actions', title: t('앱 추가…'), icon: 'layers', query: true, keywords: ['app', 'install'], run: () => (where === 'main' ? (dialogs.addApp = true) : openSettings('apps')) },
-    {
-      id: 'float',
-      group: 'actions',
-      title: where === 'main' ? t('플로팅 런처로 전환') : floatOn ? t('플로팅 런처 숨기기') : t('플로팅 런처 표시'),
-      icon: 'float',
-      shortcut: s.floatHotkeyEnabled ? s.floatHotkey : undefined,
-      keywords: ['float', 'floating'],
-      run: () => (where === 'main' ? api.switchView('float') : api.setFloat(!floatOn)),
-    },
+    { id: 'floatSettings', group: 'actions', title: t('플로팅 바 설정'), icon: 'float', query: true, keywords: ['float', 'floating', 'magnet'], run: () => openSettings('launcher') },
+    s.floatDocked
+      ? { id: 'floatUndock', group: 'actions', title: t('플로팅 바를 작업 표시줄에서 떼기'), icon: 'float', query: true, keywords: ['float', 'taskbar', 'dock'], run: () => api.floatUndock() }
+      : {
+          id: 'floatOrientation',
+          group: 'actions',
+          title: s.floatOrientation === 'vertical' ? t('플로팅 바 가로로 놓기') : t('플로팅 바 세로로 놓기'),
+          icon: 'float',
+          query: true,
+          keywords: ['float', 'horizontal', 'vertical'],
+          run: () => run(api.updateSettings({ floatOrientation: s.floatOrientation === 'vertical' ? 'horizontal' : 'vertical' })),
+        },
     { id: 'refresh', group: 'actions', title: t('사용량 모두 새로고침'), icon: 'refresh', keywords: ['usage', 'refresh'], run: () => run(api.refreshUsage(), t('새로 고치는 중이에요')) },
     { id: 'settings', group: 'actions', title: t('설정'), icon: 'settings', shortcut: keysOf('settings'), run: () => openSettings() },
     { id: 'help', group: 'actions', title: t('단축키 보기'), icon: 'keyboard', shortcut: keysOf('help'), query: where === 'quick', run: () => (where === 'main' ? (ui.help = true) : openHelp()) },

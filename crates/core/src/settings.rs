@@ -25,6 +25,9 @@ impl Tristate {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
+    /// Which one-time migrations ran; missing in old files, so they start at 0.
+    #[serde(default)]
+    pub settings_rev: u32,
     // Appearance
     pub language: String,
     /// `system`, `light`, `dark`, or a dark variant: `claude`, `midnight`, `black`.
@@ -46,15 +49,15 @@ pub struct Settings {
     pub sidebar_group: String,
     /// Second line under each sidebar row with the signed-in account.
     pub sidebar_show_account: bool,
-    /// Least-left percentage at the end of each sidebar row.
-    pub sidebar_show_usage: bool,
+    /// Usage at the end of each sidebar row: the 5-hour and / or the weekly window.
+    pub sidebar_show_5h: bool,
+    pub sidebar_show_weekly: bool,
     /// In-window shortcut overrides by binding id (`""` = unassigned). Defaults live in the UI.
     pub keymap: std::collections::BTreeMap<String, String>,
 
     // Launcher behaviour
     pub start_with_os: bool,
     pub start_hidden: bool,
-    pub close_to_tray: bool,
     pub focus_if_running: bool,
     pub hide_after_launch: bool,
     pub confirm_quit_instance: bool,
@@ -66,22 +69,33 @@ pub struct Settings {
     /// `main` (default), `quick` or `none`.
     pub tray_double_click: String,
 
-    // Floating launcher
-    pub float_enabled: bool,
+    // Floating launcher (always shown while the launcher runs)
     pub float_orientation: String,
     pub float_always_on_top: bool,
     pub float_opacity: u8,
+    /// Magnet: while dragged, the strip clicks onto screen edges (and other windows').
     pub float_snap_edges: bool,
+    pub float_snap_windows: bool,
+    /// Logical px within which the magnet pulls.
+    pub float_snap_distance: u16,
+    /// Cells shown along the strip; the rest scroll with the wheel. `0` = all.
+    pub float_slots: u16,
+    /// Sits inside the taskbar (dropped onto it), laid out horizontally.
+    pub float_docked: bool,
+    /// What the docked strip stays next to: `tray`, `iconsEnd`, `iconsStart`, `widgetsLeft`,
+    /// `widgetsRight` or `free` (then `float_dock_x`, logical px from the taskbar's left).
+    pub float_dock_anchor: String,
+    pub float_dock_x: i32,
+    /// Cells shown while docked, set apart from `float_slots` so docking and undocking never
+    /// change the floating strip. `0` = as many as fit.
+    pub float_dock_slots: u16,
     /// Usage ring around each icon: `both` (outer weekly, inner 5-hour), `5h`, `weekly`,
     /// `tight` (whichever has less left) or `none`.
     pub float_ring: String,
+    /// Scale of the whole strip, as the icon size in px at 100 % (44 = 100 %).
     pub float_size: u16,
     pub float_position: Option<(i32, i32)>,
-    /// Main window ⇄ floating launcher: `swap` hides one when showing the other, `both` keeps both.
-    pub float_switch: String,
-    /// Minimising the main window switches to the floating launcher (and the title bar drops
-    /// its separate floating button).
-    pub minimize_to_float: bool,
+    /// Global hotkey that opens / closes the main window.
     pub float_hotkey: String,
     pub float_hotkey_enabled: bool,
 
@@ -122,6 +136,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            settings_rev: SETTINGS_REV,
             language: "system".into(),
             theme: "system".into(),
             accent: "#0A84FF".into(),
@@ -133,14 +148,14 @@ impl Default for Settings {
             card_usage_style: "bars".into(),
             sort: "manual".into(),
             group_by: "none".into(),
-            sidebar_group: "status".into(),
+            sidebar_group: "none".into(),
             sidebar_show_account: false,
-            sidebar_show_usage: true,
+            sidebar_show_5h: true,
+            sidebar_show_weekly: true,
             keymap: Default::default(),
 
             start_with_os: false,
             start_hidden: true,
-            close_to_tray: true,
             focus_if_running: true,
             hide_after_launch: false,
             confirm_quit_instance: true,
@@ -151,16 +166,20 @@ impl Default for Settings {
             tray_left_click: "popup".into(),
             tray_double_click: "main".into(),
 
-            float_enabled: false,
             float_orientation: "vertical".into(),
             float_always_on_top: true,
             float_opacity: 92,
             float_snap_edges: true,
+            float_snap_windows: true,
+            float_snap_distance: 12,
+            float_slots: 0,
+            float_docked: false,
+            float_dock_anchor: "tray".into(),
+            float_dock_x: 0,
+            float_dock_slots: 0,
             float_ring: "both".into(),
             float_size: 44,
             float_position: None,
-            float_switch: "swap".into(),
-            minimize_to_float: true,
             float_hotkey: "Alt+Shift+F".into(),
             float_hotkey_enabled: true,
 
@@ -190,12 +209,34 @@ impl Default for Settings {
     }
 }
 
+/// Floating bar size range (`float_size`, 44 = 100 %). The top is the web view's own zoom
+/// limit (5×): beyond it the icons could not follow the window any more.
+pub const FLOAT_SIZE_MIN: u16 = 28;
+pub const FLOAT_SIZE_MAX: u16 = 220;
+
+/// One-time changes applied to settings saved by older versions (see [`Settings::migrate`]).
+pub const SETTINGS_REV: u32 = 1;
+
 impl Settings {
+    /// Brings settings saved by an older version up to date, once.
+    /// 1: the sidebar is no longer grouped by default (Leonard, 2026-11-12).
+    pub fn migrate(&mut self) {
+        if self.settings_rev < 1 {
+            self.sidebar_group = "none".into();
+        }
+        self.settings_rev = SETTINGS_REV;
+    }
+
     /// Clamp values a hand-edited file or an old version may have left out of range.
     pub fn sanitize(&mut self) {
         self.glass_strength = self.glass_strength.min(100);
         self.float_opacity = self.float_opacity.clamp(30, 100);
-        self.float_size = self.float_size.clamp(28, 96);
+        self.float_size = self.float_size.clamp(FLOAT_SIZE_MIN, FLOAT_SIZE_MAX);
+        self.float_snap_distance = self.float_snap_distance.clamp(2, 48);
+        if !["tray", "iconsEnd", "iconsStart", "widgetsLeft", "widgetsRight", "free"].contains(&self.float_dock_anchor.as_str()) {
+            self.float_dock_anchor = "tray".into();
+        }
+        self.float_dock_x = self.float_dock_x.max(0);
         self.usage_refresh_minutes = self.usage_refresh_minutes.clamp(2, 240);
         self.taskbar_rescan_seconds = self.taskbar_rescan_seconds.clamp(1, 30);
         self.usage_warn_percent = self.usage_warn_percent.min(100);

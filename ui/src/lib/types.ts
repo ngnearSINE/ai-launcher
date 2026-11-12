@@ -16,11 +16,11 @@ export interface Settings {
   groupBy: 'none' | 'app' | 'group'
   sidebarGroup: 'status' | 'app' | 'group' | 'none'
   sidebarShowAccount: boolean
-  sidebarShowUsage: boolean
+  sidebarShow5h: boolean
+  sidebarShowWeekly: boolean
   keymap: Record<string, string>
   startWithOs: boolean
   startHidden: boolean
-  closeToTray: boolean
   focusIfRunning: boolean
   hideAfterLaunch: boolean
   confirmQuitInstance: boolean
@@ -30,16 +30,20 @@ export interface Settings {
   bestClaudeHotkeyEnabled: boolean
   trayLeftClick: 'popup' | 'main'
   trayDoubleClick: 'main' | 'quick' | 'none'
-  floatEnabled: boolean
   floatOrientation: 'vertical' | 'horizontal'
   floatAlwaysOnTop: boolean
   floatOpacity: number
   floatSnapEdges: boolean
+  floatSnapWindows: boolean
+  floatSnapDistance: number
+  floatSlots: number
+  floatDocked: boolean
+  floatDockAnchor: 'tray' | 'iconsEnd' | 'iconsStart' | 'widgetsLeft' | 'widgetsRight' | 'free'
+  floatDockX: number
+  floatDockSlots: number
   floatRing: 'both' | '5h' | 'weekly' | 'tight' | 'none'
   floatSize: number
   floatPosition: [number, number] | null
-  floatSwitch: 'swap' | 'both'
-  minimizeToFloat: boolean
   floatHotkey: string
   floatHotkeyEnabled: boolean
   taskbarSeparate: boolean
@@ -114,6 +118,7 @@ export interface InstanceAdvanced {
   usageEnabled: Tristate
   usageOrgs: string[]
   hiddenInQuick: boolean
+  hiddenInFloat: boolean
 }
 
 export type QuotaKind = 'fiveHour' | 'weekly' | 'scoped' | 'credits'

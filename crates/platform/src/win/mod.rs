@@ -1,6 +1,10 @@
 //! Windows integration.
 
+pub mod dock;
+pub mod dock_input;
+pub mod ghost;
 pub mod icon;
+pub mod magnet;
 pub mod shortcut;
 pub mod taskbar;
 pub mod watcher;

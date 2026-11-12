@@ -57,8 +57,10 @@ impl Store {
     /// and an empty catalog is used, so a bad edit never blocks the launcher from starting.
     pub fn load(path: &Path) -> Result<Self, StoreError> {
         let data = match std::fs::read(path) {
-            Ok(bytes) => match serde_json::from_slice::<StoreFile>(&bytes) {
+            // A byte-order mark (left by some editors) is not part of the JSON.
+            Ok(bytes) => match serde_json::from_slice::<StoreFile>(bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes)) {
                 Ok(mut d) => {
+                    d.settings.migrate();
                     d.settings.sanitize();
                     d.version = SCHEMA_VERSION;
                     d
@@ -110,5 +112,21 @@ mod tests {
         let s3 = Store::load(&p).unwrap();
         assert!(s3.data.instances.is_empty());
         assert!(std::fs::read_dir(dir.path()).unwrap().any(|e| e.unwrap().file_name().to_string_lossy().contains("broken")));
+    }
+
+    #[test]
+    fn bom_is_tolerated_and_old_settings_migrate_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("store.json");
+        // Saved by an older version (no settingsRev, grouped by status), with a byte-order mark.
+        let mut bytes = b"\xEF\xBB\xBF".to_vec();
+        bytes.extend_from_slice(br#"{"version":1,"settings":{"sidebarGroup":"status"}}"#);
+        std::fs::write(&p, &bytes).unwrap();
+        let mut s = Store::load(&p).unwrap();
+        assert_eq!(s.data.settings.sidebar_group, "none");
+        // Chosen again after the migration: kept.
+        s.data.settings.sidebar_group = "status".into();
+        s.save().unwrap();
+        assert_eq!(Store::load(&p).unwrap().data.settings.sidebar_group, "status");
     }
 }

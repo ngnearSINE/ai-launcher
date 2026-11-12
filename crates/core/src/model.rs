@@ -139,6 +139,9 @@ pub struct InstanceAdvanced {
     /// Hide from the floating launcher / tray list without deleting.
     #[serde(default)]
     pub hidden_in_quick: bool,
+    /// Left out of the floating launcher (shown again from the main window).
+    #[serde(default)]
+    pub hidden_in_float: bool,
 }
 
 impl Default for InstanceAdvanced {
@@ -150,6 +153,7 @@ impl Default for InstanceAdvanced {
             usage_enabled: Tristate::Inherit,
             usage_orgs: Vec::new(),
             hidden_in_quick: false,
+            hidden_in_float: false,
         }
     }
 }

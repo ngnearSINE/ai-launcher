@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+A reworked floating bar that can also live in the taskbar.
+
+- The floating bar stays on screen while the launcher runs and snaps to screen and window edges
+- Resizing: drag a corner across the bar for icon size, along it for how many icons show. The long sides change the icon size only, the ends the count only (swapped on a horizontal bar). Up to 5× larger
+- Right-click the handle to switch horizontal / vertical. A used-up limit draws its ring as a red dashed track
+- Drop the bar on the taskbar to dock it. A translucent ghost shows exactly where it will go before you let go
+- Docked, drag the handle sideways to move it; it snaps to the end of the app icons, either side of the widgets and the notification area, and keeps that place as apps open and close
+- Drag the docked bar out of the taskbar: a ghost shows where it will float, and it lands there when you let go
+- Drag either end of the docked bar for more or fewer icons (remembered apart from the floating count). Clicking, right-clicking, scrolling and reordering icons work as on the floating bar
+- Windows other apps dock into the taskbar (such as the AI usage widget) are left uncovered
+- Sidebar "Group by" now starts with "None", the default; "Show in rows" switches weekly and 5-hour usage separately
+- The title bar shows an update notice instead of search when a new version is out; the overview has a Fable column
+- Fixed: the "almost at the limit" alert repeating, and settings not loading from a store file that starts with a BOM
+
 ## 0.2.1
 
 - When one account (e.g. a work email with both a team and a personal organisation) is signed in to several instances, an instance with no organisation picked now leaves out the ones another instance already shows. A personal instance set up after a team one no longer shows the same usage. This applies to the sidebar, details, floating launcher, alerts and the suggested account; "Organisations to show" in the edit panel marks the automatic choice

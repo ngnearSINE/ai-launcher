@@ -165,8 +165,11 @@
             </Row>
           {/if}
         {/if}
-        <Row label={t('빠른 실행·플로팅에서 숨기기')}>
+        <Row label={t('빠른 실행에서 숨기기')}>
           <Switch checked={inst.advanced.hiddenInQuick} onchange={(v) => patchAdv({ hiddenInQuick: v })} />
+        </Row>
+        <Row label={t('플로팅 바에서 숨기기')} desc={t('플로팅 바에서 아이콘을 우클릭해도 숨길 수 있어요')}>
+          <Switch checked={inst.advanced.hiddenInFloat} onchange={(v) => patchAdv({ hiddenInFloat: v })} />
         </Row>
         <Row label={t('프로필 폴더')} desc={inst.profileDir ?? t('없음')} stack>
           <div class="btns">

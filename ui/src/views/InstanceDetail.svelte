@@ -3,7 +3,7 @@
   // first), and while it runs how much memory it uses. Editing stays in the side panel (F2).
   import { onDestroy } from 'svelte'
   import { api } from '../lib/api'
-  import { copyText, edit, instanceMenu, primary, quitInstance } from '../lib/actions'
+  import { copyText, edit, instanceMenu, primary, quitInstance, setHiddenInFloat } from '../lib/actions'
   import { ago, bytes } from '../lib/format'
   import { t } from '../lib/i18n.svelte'
   import { installationOf, run, ui, visibleOrgs } from '../lib/state.svelte'
@@ -69,6 +69,14 @@
       <button class="btn" onclick={() => edit(inst)} title="F2"><Icon name="sliders" size={14} /> {t('편집')}</button>
       <button class="icon-btn" aria-label={t('더 보기')} onclick={(e) => instanceMenu(e, inst)}><Icon name="more" size={18} /></button>
   </div>
+
+  {#if inst.advanced.hiddenInFloat}
+    <div class="quiet-note">
+      <Icon name="eye-off" size={15} />
+      <span>{t('플로팅 바에서 숨겨 두었어요')}</span>
+      <button class="btn sm" onclick={() => setHiddenInFloat(inst, false)}>{t('다시 표시')}</button>
+    </div>
+  {/if}
 
   {#if why}
     <div class="notice">
@@ -190,6 +198,20 @@
     gap: 6px;
     margin-top: 16px;
     padding-left: 60px;
+  }
+  .quiet-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    padding: 8px 8px 8px 12px;
+    border-radius: var(--r-md);
+    background: var(--surface-hover);
+    color: var(--text-2);
+    font-size: var(--fs-13);
+  }
+  .quiet-note span {
+    flex: 1;
   }
   .notice {
     display: flex;

@@ -4,6 +4,8 @@
 mod cli;
 mod commands;
 mod core;
+#[cfg(windows)]
+mod dock;
 mod hotkeys;
 mod i18n;
 mod icons;

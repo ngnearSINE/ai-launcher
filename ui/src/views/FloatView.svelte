@@ -7,7 +7,7 @@
   import { popupNative } from '../lib/nativeMenu'
   import { run, settings, ui, visibleInstances } from '../lib/state.svelte'
   import { createSortable, mergeOrder } from '../lib/sortable.svelte'
-  import { levelOf, mainOrg, longLabel, ringBox, ringWindows, windowsOf } from '../lib/usage'
+  import { cliNote, levelOf, mainOrg, longLabel, ringBox, ringWindows, windowsOf } from '../lib/usage'
   import type { Instance } from '../lib/types'
   import StatusBadge from '../components/StatusBadge.svelte'
   import Icon from '../components/Icon.svelte'
@@ -136,6 +136,8 @@
     if (inst.usage?.report?.email) parts.push(inst.usage.report.email)
     if (w5) parts.push(`${t('5시간')} ${pct(w5.shown)} ${word}${w5.q.resetsAt ? ` · ${until(w5.q.resetsAt, ui.now)}` : ''}`)
     if (ww) parts.push(`${longLabel(ww.q)} ${pct(ww.shown)} ${word}${ww.q.resetsAt ? ` · ${until(ww.q.resetsAt, ui.now)}` : ''}`)
+    const note = cliNote(inst)
+    if (note) parts.push(note)
     if (inst.running) parts.push(t('실행 중'))
     return parts.join('\n')
   }

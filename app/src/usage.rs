@@ -1,6 +1,8 @@
 //! Usage polling. Each instance is read from its own profile folder only (never another
-//! profile, the CLI or the app's default folder unless that *is* the instance's folder).
-//! Requests are spaced per instance, and HTTP 429 backs off progressively.
+//! profile, the CLI or the app's default folder unless that *is* the instance's folder), or
+//! from the one command-line sign-in the user linked to it. Instances that read the same
+//! source share one request. Requests are spaced per source, and HTTP 429 backs off
+//! progressively.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -9,7 +11,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use launcher_core::catalog::effective;
 use launcher_core::{Instance, UsageKind};
-use launcher_usage::{claude, cursor, QuotaKind, UsageError, UsageReport};
+use launcher_usage::{agy, claude, codex, cursor, grok_cli, QuotaKind, UsageError, UsageReport};
 use serde::Serialize;
 
 use crate::core::Core;
@@ -120,8 +122,8 @@ fn remember(core: &Core, id: &str, source: &str, report: &UsageReport) {
     }
 }
 
-fn forget_missing(core: &Core, keep: &[(String, std::path::PathBuf)]) {
-    cache(core).lock().retain(|id, _| keep.iter().any(|(j, _)| j == id));
+fn forget_missing(core: &Core, keep: &[Job]) {
+    cache(core).lock().retain(|id, _| keep.iter().any(|j| &j.id == id));
 }
 
 pub fn start(core: Arc<Core>) {
@@ -137,40 +139,70 @@ pub fn start(core: Arc<Core>) {
     });
 }
 
-/// Instances that have usage, the folder each one must be read from and where it comes from.
-fn jobs(core: &Core) -> Vec<(String, std::path::PathBuf, UsageKind)> {
+/// One instance whose usage is read, and where from.
+struct Job {
+    id: String,
+    kind: UsageKind,
+    /// The instance's own profile folder; None for a linked command-line sign-in.
+    dir: Option<std::path::PathBuf>,
+}
+
+impl Job {
+    /// What the numbers come from: the folder, or `cli:<name>`. Instances with the same
+    /// source share one request.
+    fn source(&self) -> String {
+        match (&self.dir, self.kind.cli_id()) {
+            (_, Some(cli)) => format!("cli:{cli}"),
+            (Some(dir), None) => dir.display().to_string(),
+            (None, None) => String::new(),
+        }
+    }
+}
+
+/// Instances that have usage (their app's own, or a CLI the user linked) and where to read it.
+fn jobs(core: &Core) -> Vec<Job> {
     let store = core.store.lock();
     let data = &store.data;
     data.instances
         .iter()
         .filter_map(|inst| {
-            let install = data.installations.iter().find(|i| i.id == inst.installation_id)?;
-            let adapter = core.registry.get(&install.adapter)?;
-            let kind = adapter.usage(install)?;
+            let kind = launcher_core::catalog::usage_kind(data, &core.registry, inst)?;
             if !effective(&data.settings, inst).usage_enabled {
                 return None;
             }
-            // Exactly this instance's folder, resolved to where the app really wrote it.
-            let dir = launcher_core::catalog::physical_profile_dir(data, &core.registry, &core.env, inst)?;
-            Some((inst.id.clone(), dir, kind))
+            let dir = if kind.is_cli() {
+                None
+            } else {
+                // Exactly this instance's folder, resolved to where the app really wrote it.
+                Some(launcher_core::catalog::physical_profile_dir(data, &core.registry, &core.env, inst)?)
+            };
+            Some(Job { id: inst.id.clone(), kind, dir })
         })
         .collect()
 }
 
-/// Whether the folder holds a sign-in of that kind (local files only, no request).
-fn has_session(kind: UsageKind, dir: &std::path::Path) -> bool {
-    match kind {
-        UsageKind::ClaudeDesktop => claude::has_session(dir),
-        UsageKind::Cursor => cursor::has_session(cursor::App::Cursor, dir),
-        UsageKind::GrokBot => cursor::has_session(cursor::App::GrokBot, dir),
+/// Whether the source holds a sign-in of that kind (local files only, no request).
+fn has_session(kind: UsageKind, dir: Option<&std::path::Path>) -> bool {
+    match (kind, dir) {
+        (UsageKind::ClaudeDesktop, Some(d)) => claude::has_session(d),
+        (UsageKind::Cursor, Some(d)) => cursor::has_session(cursor::App::Cursor, d),
+        (UsageKind::GrokBot, Some(d)) => cursor::has_session(cursor::App::GrokBot, d),
+        (UsageKind::CodexCli, _) => codex::account().is_some(),
+        (UsageKind::GrokCli, _) => grok_cli::account().is_some(),
+        (UsageKind::Antigravity, _) => agy::account().is_some(),
+        _ => false,
     }
 }
 
-async fn fetch(core: &Core, kind: UsageKind, dir: &std::path::Path) -> Result<UsageReport, UsageError> {
-    match kind {
-        UsageKind::ClaudeDesktop => claude::fetch(&core.http, dir).await,
-        UsageKind::Cursor => cursor::fetch(&core.http, cursor::App::Cursor, dir).await,
-        UsageKind::GrokBot => cursor::fetch(&core.http, cursor::App::GrokBot, dir).await,
+async fn fetch(core: &Core, kind: UsageKind, dir: Option<&std::path::Path>) -> Result<UsageReport, UsageError> {
+    match (kind, dir) {
+        (UsageKind::ClaudeDesktop, Some(d)) => claude::fetch(&core.http, d).await,
+        (UsageKind::Cursor, Some(d)) => cursor::fetch(&core.http, cursor::App::Cursor, d).await,
+        (UsageKind::GrokBot, Some(d)) => cursor::fetch(&core.http, cursor::App::GrokBot, d).await,
+        (UsageKind::CodexCli, _) => codex::fetch().await,
+        (UsageKind::GrokCli, _) => grok_cli::fetch(&core.http).await,
+        (UsageKind::Antigravity, _) => agy::fetch().await,
+        _ => Err(UsageError::NotSignedIn),
     }
 }
 
@@ -179,70 +211,93 @@ async fn tick(core: &Arc<Core>) {
     let refresh = core.settings().usage_refresh_minutes as i64 * 60;
     {
         let mut usage = core.usage.lock();
-        usage.retain(|id, _| jobs.iter().any(|(j, _, _)| j == id));
+        usage.retain(|id, _| jobs.iter().any(|j| &j.id == id));
     }
-    let keep: Vec<(String, std::path::PathBuf)> = jobs.iter().map(|(id, dir, _)| (id.clone(), dir.clone())).collect();
-    forget_missing(core, &keep);
-    for (id, dir, kind) in jobs {
-        let source = dir.display().to_string();
+    forget_missing(core, &jobs);
+    // Instances that read the same source, in list order.
+    let mut groups: Vec<(String, Vec<&Job>)> = Vec::new();
+    for job in &jobs {
+        let source = job.source();
+        match groups.iter_mut().find(|(s, _)| *s == source) {
+            Some((_, list)) => list.push(job),
+            None => groups.push((source, vec![job])),
+        }
+    }
+    for (source, group) in groups {
+        let first = group[0];
+        let ids: Vec<String> = group.iter().map(|j| j.id.clone()).collect();
         let due = {
             let mut usage = core.usage.lock();
-            let e = usage.entry(id.clone()).or_insert_with(|| entry_for(core, &id, source.clone()));
-            if e.source != source {
-                *e = entry_for(core, &id, source.clone());
+            let mut due = false;
+            for id in &ids {
+                let e = usage.entry(id.clone()).or_insert_with(|| entry_for(core, id, source.clone()));
+                if e.source != source {
+                    *e = entry_for(core, id, source.clone());
+                }
+                due |= Utc::now() >= e.next_at;
             }
-            Utc::now() >= e.next_at
+            due
         };
         if !due {
             continue;
         }
-        if !has_session(kind, &dir) {
+        if !has_session(first.kind, first.dir.as_deref()) {
             let mut usage = core.usage.lock();
-            if let Some(e) = usage.get_mut(&id) {
-                e.status = "error";
-                e.report = None;
-                e.error = Some(UsageError::NotSignedIn);
-                e.next_at = Utc::now() + chrono::Duration::seconds(60);
+            for id in &ids {
+                if let Some(e) = usage.get_mut(id) {
+                    e.status = "error";
+                    e.report = None;
+                    e.error = Some(UsageError::NotSignedIn);
+                    e.next_at = Utc::now() + chrono::Duration::seconds(60);
+                }
             }
             drop(usage);
             core.broadcast();
             continue;
         }
-        set_status(core, &id, "loading");
-        let result = fetch(core, kind, &dir).await;
+        for id in &ids {
+            set_status(core, id, "loading");
+        }
+        let result = fetch(core, first.kind, first.dir.as_deref()).await;
+        if let Err(err) = &result {
+            // Kept short: the reason only (never a token or an address).
+            log::info!("usage {}: {err:?}", ids.join(","));
+        }
         {
             let mut usage = core.usage.lock();
-            let Some(e) = usage.get_mut(&id) else { continue };
             let now = Utc::now();
-            match result {
-                Ok(r) => {
-                    remember(core, &id, &e.source, &r);
-                    e.status = "ok";
-                    e.report = Some(r);
-                    e.error = None;
-                    e.strikes = 0;
-                    e.next_at = now + chrono::Duration::seconds(refresh.max(MIN_INTERVAL_SECS));
-                }
-                Err(err) => {
-                    // Kept short: the reason only (never a token or an address).
-                    log::info!("usage {id}: {err:?}");
-                    let wait = match err {
-                        UsageError::RateLimited(s) => {
-                            e.strikes += 1;
-                            let backoff = (MIN_INTERVAL_SECS * 2i64.pow(e.strikes.min(5))).min(MAX_BACKOFF_SECS);
-                            (s as i64).max(backoff)
-                        }
-                        UsageError::Network(_) => 60,
-                        _ => refresh.max(MIN_INTERVAL_SECS),
-                    };
-                    // Keep the last good numbers visible; the card marks them as stale.
-                    e.status = if e.report.is_some() { "ok" } else { "error" };
-                    e.error = Some(err);
-                    e.next_at = now + chrono::Duration::seconds(wait);
+            for id in &ids {
+                let Some(e) = usage.get_mut(id) else { continue };
+                match &result {
+                    Ok(r) => {
+                        remember(core, id, &e.source, r);
+                        e.status = "ok";
+                        e.report = Some(r.clone());
+                        e.error = None;
+                        e.strikes = 0;
+                        e.next_at = now + chrono::Duration::seconds(refresh.max(MIN_INTERVAL_SECS));
+                    }
+                    Err(err) => {
+                        let wait = match err {
+                            UsageError::RateLimited(s) => {
+                                e.strikes += 1;
+                                let backoff = (MIN_INTERVAL_SECS * 2i64.pow(e.strikes.min(5))).min(MAX_BACKOFF_SECS);
+                                (*s as i64).max(backoff)
+                            }
+                            UsageError::Network(_) => 60,
+                            _ => refresh.max(MIN_INTERVAL_SECS),
+                        };
+                        // Keep the last good numbers visible; the card marks them as stale.
+                        e.status = if e.report.is_some() { "ok" } else { "error" };
+                        e.error = Some(err.clone());
+                        e.next_at = now + chrono::Duration::seconds(wait);
+                    }
                 }
             }
         }
-        alerts(core, &id);
+        for id in &ids {
+            alerts(core, id);
+        }
         core.broadcast();
     }
 }

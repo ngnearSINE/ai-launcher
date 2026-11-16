@@ -7,7 +7,7 @@
   import { usageInstances } from '../lib/sidebar.svelte'
   import { dialogs, installationOf, run, settings, ui, visibleInstances } from '../lib/state.svelte'
   import type { Instance } from '../lib/types'
-  import { bestClaude, levelOf, longLabel, mainOrg, scopedOf, usageErrorText, windowsOf } from '../lib/usage'
+  import { bestClaude, cliNote, cliOf, levelOf, longLabel, mainOrg, scopedOf, usageErrorText, windowsOf } from '../lib/usage'
   import Icon from '../components/Icon.svelte'
   import StatusBadge from '../components/StatusBadge.svelte'
   import UsageWindow from '../components/UsageWindow.svelte'
@@ -83,8 +83,9 @@
                   <div class="name-row">
                     <span class="name truncate">{a.alias}</span>
                     {#if best?.id === a.id}<span class="tag">{t('추천')}</span>{/if}
+                    {#if cliOf(a.usageKind)}<span class="tag cli" title={cliNote(a)}>CLI</span>{/if}
                   </div>
-                  <div class="faint small truncate">{a.usage?.report?.email ?? installationOf(a)?.name}</div>
+                  <div class="faint small truncate">{a.usage?.report?.email || installationOf(a)?.name}</div>
                 </div>
               </div>
               {#if w.w5 || w.ww}
@@ -92,7 +93,7 @@
                 <div role="cell">{#if w.ww}<UsageWindow q={w.ww.q} col="weekly" />{/if}</div>
                 {#if hasFable}<div role="cell">{#if fable}<UsageWindow q={fable.q} col={fable.q.kind} />{/if}</div>{/if}
               {:else}
-                <div class="span2 muted small" class:span3={hasFable} role="cell">{a.usage?.error ? usageErrorText(a.usage.error, a.usage.nextAt) : t('불러오는 중…')}</div>
+                <div class="span2 muted small" class:span3={hasFable} role="cell">{a.usage?.error ? usageErrorText(a.usage.error, a.usage.nextAt, a.usageKind) : t('불러오는 중…')}</div>
               {/if}
             </div>
           {/each}
@@ -228,6 +229,12 @@
     line-height: 16px;
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  /* Numbers read through a CLI sign-in: a quiet mark, explained on hover. */
+  .tag.cli {
+    color: var(--text-2);
+    background: var(--s2);
+    cursor: help;
   }
   .who {
     flex: 1;

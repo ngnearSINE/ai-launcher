@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { Instance, Installation, Settings, Snapshot } from './types'
+import type { CliAccount, Instance, Installation, Settings, Snapshot } from './types'
 
 type Patch<T> = Partial<T> & Record<string, unknown>
 
@@ -28,6 +28,7 @@ export const api = {
   updateSettings: (patch: Partial<Settings>) => invoke<void>('update_settings', { patch }),
   resetSettings: () => invoke<void>('reset_settings'),
   refreshUsage: (id?: string) => invoke<void>('refresh_usage', { id }),
+  cliUsageAccount: (source: string) => invoke<CliAccount | null>('cli_usage_account', { source }),
   openProfile: (id: string) => invoke<void>('open_profile', { id }),
   openConfigDir: () => invoke<void>('open_config_dir'),
   createShortcut: (id: string, place: 'desktop' | 'startMenu') => invoke<string>('create_shortcut', { id, place }),

@@ -1,7 +1,7 @@
 // Sidebar sections and row order. The sidebar draws them; the key handler (Ctrl+1…9, arrows,
 // Ctrl+[ ]) walks the same order, so numbers and arrows always match what is on screen.
 import { t } from './i18n.svelte'
-import { installationOf, settings, ui, visibleInstances } from './state.svelte'
+import { settings, ui, visibleInstances } from './state.svelte'
 import type { Instance } from './types'
 import { statusOf } from './usage'
 
@@ -73,7 +73,8 @@ export function sidebarOrder(): Instance[] {
   return sidebarSections().flatMap((sec) => (fold[sec.id] ? [] : sec.items))
 }
 
-/** Instances that report Claude usage, for the footer summary and the overview. */
+/** Instances that report usage (their app's own or a linked CLI), for the footer summary and
+ *  the overview. */
 export function usageInstances(): Instance[] {
-  return visibleInstances().filter((i) => installationOf(i)?.hasUsage && i.effective.usageEnabled)
+  return visibleInstances().filter((i) => i.usageKind && i.effective.usageEnabled)
 }

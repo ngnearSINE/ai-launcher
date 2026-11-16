@@ -26,7 +26,7 @@ pub enum Isolation {
     None,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum UsageKind {
     /// Claude Desktop: the OAuth token cache inside that instance's own profile folder.
@@ -35,6 +35,48 @@ pub enum UsageKind {
     Cursor,
     /// Grok Bot: the Cursor account in `sand-secrets.json` of that instance's folder.
     GrokBot,
+    /// The Codex CLI sign-in (`~/.codex`), linked to a ChatGPT instance by the user.
+    CodexCli,
+    /// The Grok CLI sign-in (`~/.grok/auth.json`), linked to a Grok instance by the user.
+    GrokCli,
+    /// The Antigravity CLI (`agy`), linked to a Gemini instance by the user.
+    Antigravity,
+}
+
+impl UsageKind {
+    /// Usage kinds that come from a command-line sign-in on this computer rather than from the
+    /// instance's own profile. They are never picked automatically: the user links one in the
+    /// instance's settings (`InstanceAdvanced::usage_source`).
+    pub const CLI: [UsageKind; 3] = [UsageKind::CodexCli, UsageKind::GrokCli, UsageKind::Antigravity];
+
+    pub fn is_cli(self) -> bool {
+        Self::CLI.contains(&self)
+    }
+
+    /// Stored name of a CLI source (`codex`, `grok`, `agy`).
+    pub fn cli_id(self) -> Option<&'static str> {
+        match self {
+            UsageKind::CodexCli => Some("codex"),
+            UsageKind::GrokCli => Some("grok"),
+            UsageKind::Antigravity => Some("agy"),
+            _ => None,
+        }
+    }
+
+    pub fn from_cli_id(id: &str) -> Option<UsageKind> {
+        Self::CLI.into_iter().find(|k| k.cli_id() == Some(id))
+    }
+
+    /// The one CLI an app (by its logo) may be linked to: ChatGPT ↔ Codex, Grok ↔ Grok CLI,
+    /// Gemini ↔ Antigravity. Other apps have none.
+    pub fn cli_for_logo(logo: &str) -> Option<UsageKind> {
+        match logo {
+            "chatgpt" => Some(UsageKind::CodexCli),
+            "grok" => Some(UsageKind::GrokCli),
+            "gemini" => Some(UsageKind::Antigravity),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

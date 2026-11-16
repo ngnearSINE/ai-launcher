@@ -95,7 +95,7 @@ fn unwrap_safe_storage(dir: &Path, stored: &str) -> Result<String, UsageError> {
     String::from_utf8(plain).map_err(|_| UsageError::Decrypt("utf8".into()))
 }
 
-fn jwt_claims(token: &str) -> Option<Value> {
+pub(crate) fn jwt_claims(token: &str) -> Option<Value> {
     let payload = token.split('.').nth(1)?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload.trim_end_matches('=')).ok()?;
     serde_json::from_slice(&bytes).ok()

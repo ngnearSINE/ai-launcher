@@ -2,7 +2,7 @@
 // Same rules as the team's AI Usage widget: values show what is left by default, a pace tick
 // marks where usage would be if spread evenly, and "pace warning" only fires when the window
 // would run out well before it resets and half or less is left.
-import type { Instance, OrgUsage, Quota, Settings, UsageError } from './types'
+import type { Instance, OrgUsage, Quota, Settings, UsageError, UsageKind } from './types'
 import { installationOf, ui, visibleOrgs } from './state.svelte'
 import { t } from './i18n.svelte'
 import { until } from './format'
@@ -63,6 +63,32 @@ export function windowNote(w: Win, now = Date.now(), short = false): string {
   return ''
 }
 
+// ---- where the numbers come from -------------------------------------------------------------
+
+/** CLI sign-ins an instance can be linked to (ChatGPT ↔ Codex, Grok ↔ Grok CLI, Gemini ↔
+ *  Antigravity): stored id, display name and the app whose limits they stand in for. */
+const CLI: Partial<Record<UsageKind, { id: string; name: string; app: string }>> = {
+  codexCli: { id: 'codex', name: 'Codex CLI', app: 'ChatGPT' },
+  grokCli: { id: 'grok', name: 'Grok CLI', app: 'Grok' },
+  antigravity: { id: 'agy', name: 'Antigravity CLI', app: 'Gemini' },
+}
+
+export function cliOf(kind: UsageKind | null | undefined) {
+  return kind ? CLI[kind] : undefined
+}
+
+/** Whether the instance shows usage at all (its app's own, or a linked CLI). */
+export function hasUsage(inst: Instance): boolean {
+  return !!inst.usageKind
+}
+
+/** For numbers read through a CLI: whose sign-in they are and why they can differ from the
+ *  app's own limits. '' otherwise. */
+export function cliNote(inst: Instance): string {
+  const c = cliOf(inst.usageKind)
+  return c ? t('{cli} 로그인 기준이에요. {app} 채팅 한도와 다를 수 있어요', { cli: c.name, app: c.app }) : ''
+}
+
 // ---- instance status (sidebar groups, status badges, palette) ---------------------------------
 
 export type Status = 'needs' | 'crit' | 'warn' | 'running' | 'idle'
@@ -71,11 +97,11 @@ export type Status = 'needs' | 'crit' | 'warn' | 'running' | 'idle'
 export function statusOf(inst: Instance, s: Settings): Status {
   const install = installationOf(inst)
   if (!install?.present) return 'needs'
-  if (install.hasUsage && inst.effective.usageEnabled && !inst.usage?.report) {
+  if (hasUsage(inst) && inst.effective.usageEnabled && !inst.usage?.report) {
     const code = inst.usage?.error?.code
     if (code === 'notSignedIn' || code === 'sessionExpired' || code === 'accountUnknown' || code === 'decrypt') return 'needs'
   }
-  const sev = install.hasUsage && inst.effective.usageEnabled ? severity(mainOrg(inst), s) : ''
+  const sev = hasUsage(inst) && inst.effective.usageEnabled ? severity(mainOrg(inst), s) : ''
   if (sev) return sev
   return inst.running ? 'running' : 'idle'
 }
@@ -85,6 +111,9 @@ export function needsText(inst: Instance): string | null {
   const install = installationOf(inst)
   if (!install?.present) return t('앱을 찾을 수 없어요')
   const code = inst.usage?.error?.code
+  const cli = cliOf(inst.usageKind)
+  if (cli && code === 'notSignedIn') return t('{cli} 로그인이 필요해요', { cli: cli.name })
+  if (cli && code === 'sessionExpired' && !inst.usage?.report) return t('{cli} 로그인이 만료됐어요', { cli: cli.name })
   if (code === 'notSignedIn') return t('로그인이 필요해요')
   if (code === 'sessionExpired') return t('세션이 만료됐어요')
   if (code === 'accountUnknown') return t('계정을 확인할 수 없어요')
@@ -92,9 +121,16 @@ export function needsText(inst: Instance): string | null {
   return null
 }
 
-/** A usage error as a sentence: signed-out / expired read as facts with a next step, not alarms. */
-export function usageErrorText(e: UsageError | null | undefined, nextAt?: string): string {
+/** A usage error as a sentence: signed-out / expired read as facts with a next step, not alarms.
+ *  `kind` words the next step for a linked CLI (sign in there, not in the app). */
+export function usageErrorText(e: UsageError | null | undefined, nextAt?: string, kind?: UsageKind | null): string {
   if (!e) return ''
+  const cli = cliOf(kind)
+  if (cli) {
+    if (e.code === 'notSignedIn') return t('{cli}에 로그인하면 사용량이 보여요', { cli: cli.name })
+    if (e.code === 'sessionExpired') return t('{cli} 로그인이 만료됐어요 · {cli}를 한 번 실행하면 갱신돼요', { cli: cli.name })
+    if (e.code === 'unsupported') return t('이 {cli} 버전은 사용량을 알려 주지 않아요 · 업데이트 뒤 런처를 다시 켜 주세요', { cli: cli.name })
+  }
   switch (e.code) {
     case 'notSignedIn':
       return t('로그인하면 사용량이 보여요')

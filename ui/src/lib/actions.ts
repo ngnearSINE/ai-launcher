@@ -161,7 +161,7 @@ export function instanceMenuItems(inst: Instance, compact = false): MenuItem[] {
   } else {
     items.push({ label: t('자세히 보기'), icon: 'app', action: () => reveal(inst) })
   }
-  if (install?.hasUsage) items.push({ label: t('사용량 새로고침'), icon: 'refresh', action: () => run(api.refreshUsage(inst.id)) })
+  if (inst.usageKind) items.push({ label: t('사용량 새로고침'), icon: 'refresh', action: () => run(api.refreshUsage(inst.id)) })
   items.push({ label: t('프로필 폴더 열기'), icon: 'folder', action: () => run(api.openProfile(inst.id)) })
   if (!compact) {
     if (inst.profileDir) items.push({ label: t('프로필 경로 복사'), icon: 'copy', action: () => copyText(inst.profileDir!, t('경로를 복사했어요')) })

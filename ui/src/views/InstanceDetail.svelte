@@ -8,7 +8,7 @@
   import { t } from '../lib/i18n.svelte'
   import { installationOf, run, ui, visibleOrgs } from '../lib/state.svelte'
   import type { Instance } from '../lib/types'
-  import { isLaunching, needsText, usageErrorText } from '../lib/usage'
+  import { cliNote, cliOf, hasUsage, isLaunching, needsText, usageErrorText } from '../lib/usage'
   import Icon from '../components/Icon.svelte'
   import StatusBadge from '../components/StatusBadge.svelte'
   import UsageWindow from '../components/UsageWindow.svelte'
@@ -22,6 +22,7 @@
   const usage = $derived(inst.usage)
   const why = $derived(needsText(inst))
   const email = $derived(usage?.report?.email ?? '')
+  const cli = $derived(cliOf(inst.usageKind))
 
   // Memory is read only while this pane shows a running instance (no polling otherwise).
   let stats = $state<{ memory: number; processes: number } | null>(null)
@@ -55,6 +56,7 @@
         <span>{install?.name}</span>
         {#if email}<span class="sep">·</span><span class="truncate">{email}</span>{/if}
         {#if org?.plan}<span class="plan">{org.plan}</span>{/if}
+        {#if cli}<span class="plan cli" title={cliNote(inst)}>CLI</span>{/if}
       </div>
     </div>
   </header>
@@ -81,12 +83,12 @@
   {#if why}
     <div class="notice">
       <Icon name="alert" size={16} />
-      <span>{why}{install?.present && install?.hasUsage ? ` — ${t('앱을 열어 로그인하면 사용량이 다시 보여요')}` : ''}</span>
-      {#if install?.present}<button class="btn sm" onclick={() => primary(inst)}>{t('앱 열기')}</button>{/if}
+      <span>{why}{cli ? ` — ${t('터미널에서 {cli}에 로그인하면 사용량이 다시 보여요', { cli: cli.name })}` : install?.present && hasUsage(inst) ? ` — ${t('앱을 열어 로그인하면 사용량이 다시 보여요')}` : ''}</span>
+      {#if install?.present && !cli}<button class="btn sm" onclick={() => primary(inst)}>{t('앱 열기')}</button>{/if}
     </div>
   {/if}
 
-  {#if install?.hasUsage}
+  {#if hasUsage(inst)}
     <section>
       <div class="sec-head">
         <h2>{t('사용량')}</h2>
@@ -107,7 +109,7 @@
         <p class="faint">{t('이 인스턴스는 사용량 조회가 꺼져 있어요. 편집 → 고급에서 켤 수 있어요.')}</p>
       {:else if !usage?.report}
         {#if usage?.error}
-          <p class="muted">{usageErrorText(usage.error, usage.nextAt)}</p>
+          <p class="muted">{usageErrorText(usage.error, usage.nextAt, inst.usageKind)}</p>
         {:else}
           <div class="grid">{#each [0, 1] as i (i)}<div class="skel"></div>{/each}</div>
         {/if}
@@ -122,7 +124,8 @@
             <span class="legend">{#each org.breakdown as b, i (b.label)}<span><i class="s{i}"></i>{b.label} <span class="num">{Math.round(b.percent)}%</span></span>{/each}</span>
           </div>
         {/if}
-        {#if usage.error}<p class="stale"><Icon name="alert" size={13} /> {usageErrorText(usage.error, usage.nextAt)} · {t('{time} 기준 숫자예요', { time: ago(usage.report.fetchedAt, ui.now) })}</p>{/if}
+        {#if cli}<p class="faint small cli-note"><Icon name="info" size={13} /> {cliNote(inst)}</p>{/if}
+        {#if usage.error}<p class="stale"><Icon name="alert" size={13} /> {usageErrorText(usage.error, usage.nextAt, inst.usageKind)} · {t('{time} 기준 숫자예요', { time: ago(usage.report.fetchedAt, ui.now) })}</p>{/if}
       {/if}
     </section>
   {/if}
@@ -190,6 +193,16 @@
     background: var(--s2);
     font-size: var(--fs-12);
     font-weight: 600;
+  }
+  .plan.cli {
+    color: var(--text-2);
+    cursor: help;
+  }
+  .cli-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 0;
   }
   .acts {
     display: flex;

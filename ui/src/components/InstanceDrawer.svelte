@@ -4,7 +4,8 @@
   import { bytes, ago } from '../lib/format'
   import { t } from '../lib/i18n.svelte'
   import { installationOf, instanceById, run, ui } from '../lib/state.svelte'
-  import type { Instance, InstanceAdvanced, LaunchOptions, Tristate } from '../lib/types'
+  import type { CliAccount, Instance, InstanceAdvanced, LaunchOptions, Tristate } from '../lib/types'
+  import { cliOf } from '../lib/usage'
   import StatusBadge from './StatusBadge.svelte'
   import Icon from './Icon.svelte'
   import { ColorPick, Row, Segmented, Switch } from './controls'
@@ -22,6 +23,30 @@
       api.profileSize(inst.id).then((n) => (size = n)).catch(() => (size = null))
     }
   })
+
+  // The CLI sign-in this instance may use for its usage, read from local files each time the
+  // advanced tab opens (so signing in to the CLI meanwhile shows up). undefined = reading.
+  const cli = $derived(cliOf(inst?.cliChoice))
+  let cliAccount = $state<CliAccount | null | undefined>(undefined)
+  $effect(() => {
+    const id = cli?.id
+    if (tab !== 'advanced' || !id) return
+    cliAccount = undefined
+    api.cliUsageAccount(id).then((a) => (cliAccount = a)).catch(() => (cliAccount = null))
+  })
+  const cliLabel = $derived.by(() => {
+    if (!cli) return ''
+    const parts = [t('{cli} 로그인', { cli: cli.name })]
+    if (cliAccount?.email) parts.push(cliAccount.email)
+    if (cliAccount?.plan) parts.push(cliAccount.plan)
+    return parts.join(' · ') + (cliAccount === undefined ? ' …' : '')
+  })
+  const linked = $derived(!!cli && inst?.advanced.usageSource === cli.id)
+  function setSource(v: string) {
+    if (!inst) return
+    const id = inst.id
+    run(api.updateInstance(id, { advanced: { ...inst.advanced, usageSource: v || null } }).then(() => api.refreshUsage(id)))
+  }
 
   function patch(p: Partial<Instance>) {
     if (inst) run(api.updateInstance(inst.id, p))
@@ -137,8 +162,22 @@
         <Row label={t('고정 아이콘은 런처로 실행')} desc={t('고정한 버튼을 누르면 런처가 이 인스턴스를 정확히 띄워요')} stack>
           <Segmented size="sm" value={inst.advanced.relaunchThroughLauncher} options={tri} onchange={(v) => patchAdv({ relaunchThroughLauncher: v })} />
         </Row>
-        {#if install?.hasUsage}
-          <Row label={t('사용량 조회')} desc={t('이 인스턴스 프로필의 로그인만 사용해요')} stack>
+        {#if cli}
+          <Row
+            label={t('사용량 출처')}
+            desc={cliAccount === null && !linked
+              ? t('이 컴퓨터에서 {cli} 로그인을 찾지 못했어요. 터미널에서 로그인한 뒤 다시 열어 주세요', { cli: cli.name })
+              : t('{cli} 로그인으로 사용량을 읽어요. {app} 채팅 한도와 다를 수 있어요', { cli: cli.name, app: cli.app })}
+            stack
+          >
+            <select class="select source" value={linked ? cli.id : ''} onchange={(e) => setSource((e.target as HTMLSelectElement).value)}>
+              <option value="">{t('없음')}</option>
+              <option value={cli.id} disabled={cliAccount === null && !linked}>{cliLabel}</option>
+            </select>
+          </Row>
+        {/if}
+        {#if inst.usageKind}
+          <Row label={t('사용량 조회')} desc={cliOf(inst.usageKind) ? t('연결한 CLI 로그인만 사용해요') : t('이 인스턴스 프로필의 로그인만 사용해요')} stack>
             <Segmented size="sm" value={inst.advanced.usageEnabled} options={tri} onchange={(v) => patchAdv({ usageEnabled: v })} />
           </Row>
           {#if orgs.length > 1}
@@ -196,6 +235,11 @@
 {/if}
 
 <style>
+  /* The CLI account line (name · email · plan) is long; give it the row's full width. */
+  .select.source {
+    width: 100%;
+    min-width: 0;
+  }
   .scrim-lite {
     position: fixed;
     inset: 40px 0 0 0;

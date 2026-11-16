@@ -540,4 +540,18 @@ export const en: Record<string, string> = {
   '주의만 색': 'Only when low',
   '「주의만 색」은 여유 있는 막대를 회색으로 두어 빠듯한 계정이 먼저 눈에 띄어요': '"Only when low" keeps bars with room to spare grey, so the account running low stands out',
   '{time} 뒤 바닥나요': 'Runs out in {time}',
+  // Usage read through a CLI sign-in the user linked (Codex, Grok CLI, Antigravity).
+  '사용량 출처': 'Usage source',
+  '{cli} 로그인': '{cli} sign-in',
+  '{cli} 로그인 기준이에요. {app} 채팅 한도와 다를 수 있어요': 'From the {cli} sign-in. It can differ from {app} chat limits',
+  '{cli} 로그인으로 사용량을 읽어요. {app} 채팅 한도와 다를 수 있어요': 'Reads usage with the {cli} sign-in. It can differ from {app} chat limits',
+  '이 컴퓨터에서 {cli} 로그인을 찾지 못했어요. 터미널에서 로그인한 뒤 다시 열어 주세요':
+    'No {cli} sign-in on this computer. Sign in from a terminal, then open this again',
+  '연결한 CLI 로그인만 사용해요': 'Uses only the linked CLI sign-in',
+  '{cli} 로그인이 필요해요': 'Sign in to {cli}',
+  '{cli} 로그인이 만료됐어요': '{cli} sign-in expired',
+  '{cli}에 로그인하면 사용량이 보여요': 'Sign in to {cli} to see usage',
+  '{cli} 로그인이 만료됐어요 · {cli}를 한 번 실행하면 갱신돼요': '{cli} sign-in expired · running {cli} once renews it',
+  '이 {cli} 버전은 사용량을 알려 주지 않아요 · 업데이트 뒤 런처를 다시 켜 주세요': 'This {cli} version does not report usage · update it, then restart the launcher',
+  '터미널에서 {cli}에 로그인하면 사용량이 다시 보여요': 'sign in to {cli} in a terminal to see usage again',
 }

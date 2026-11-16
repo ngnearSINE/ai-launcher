@@ -12,7 +12,7 @@
   import { createSortable, mergeOrder } from '../lib/sortable.svelte'
   import { dialogs, installationOf, run, settings, ui } from '../lib/state.svelte'
   import type { Instance, Settings as S } from '../lib/types'
-  import { isLaunching, levelOf, longLabel, mainOrg, needsText, shortLeft, statusOf, windowsOf } from '../lib/usage'
+  import { cliNote, cliOf, isLaunching, levelOf, longLabel, mainOrg, needsText, shortLeft, statusOf, windowsOf } from '../lib/usage'
   import Icon from './Icon.svelte'
   import StatusBadge from './StatusBadge.svelte'
 
@@ -42,7 +42,7 @@
   }
   function rowTitle(inst: Instance) {
     const why = needsText(inst)
-    return [inst.alias, inst.usage?.report?.email, why].filter(Boolean).join('\n')
+    return [inst.alias, inst.usage?.report?.email, cliNote(inst), why].filter(Boolean).join('\n')
   }
 </script>
 
@@ -97,7 +97,9 @@
                 <span class="alias truncate">{inst.alias}</span>
                 {#if s.sidebarShowAccount}
                   {@const acct = inst.usage?.report?.email || installationOf(inst)?.name || ''}
-                  {#if acct && acct !== inst.alias}<span class="acct truncate">{acct}</span>{/if}
+                  {#if cliOf(inst.usageKind)}
+                    <span class="acct truncate" title={cliNote(inst)}>CLI{acct && acct !== inst.alias ? ` · ${acct}` : ''}</span>
+                  {:else if acct && acct !== inst.alias}<span class="acct truncate">{acct}</span>{/if}
                 {/if}
               </span>
               <span class="trail">

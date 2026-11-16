@@ -40,6 +40,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         update_settings,
         reset_settings,
         refresh_usage,
+        cli_usage_account,
         open_profile,
         open_config_dir,
         create_shortcut,
@@ -514,6 +515,20 @@ async fn reset_settings(app: AppHandle, core: State<'_, Arc<Core>>) -> Res<()> {
 #[tauri::command]
 fn refresh_usage(core: C, id: Option<String>) {
     crate::usage::refresh_now(&core, id.as_deref());
+}
+
+/// The sign-in a CLI usage source holds on this computer (`codex`, `grok`, `agy`), read from
+/// local files only; None when that CLI is not installed or not signed in.
+#[tauri::command]
+async fn cli_usage_account(source: String) -> Res<Option<launcher_usage::cli::CliAccount>> {
+    use launcher_usage::{agy, codex, grok_cli};
+    let kind = launcher_core::UsageKind::from_cli_id(&source).ok_or("unknown-source")?;
+    let read = move || match kind {
+        launcher_core::UsageKind::CodexCli => codex::account(),
+        launcher_core::UsageKind::GrokCli => grok_cli::account(),
+        _ => agy::account(),
+    };
+    Ok(tauri::async_runtime::spawn_blocking(read).await.unwrap_or(None))
 }
 
 fn open(app: &AppHandle, path: &Path) -> Res<()> {

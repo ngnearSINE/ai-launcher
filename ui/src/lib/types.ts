@@ -123,8 +123,19 @@ export interface InstanceAdvanced {
   relaunchThroughLauncher: Tristate
   usageEnabled: Tristate
   usageOrgs: string[]
+  /** A CLI sign-in linked as this instance's usage (`codex`, `grok`, `agy`); null = none. */
+  usageSource: string | null
   hiddenInQuick: boolean
   hiddenInFloat: boolean
+}
+
+/** Where usage comes from: an app's own sign-in, or a CLI sign-in the user linked. */
+export type UsageKind = 'claudeDesktop' | 'cursor' | 'grokBot' | 'codexCli' | 'grokCli' | 'antigravity'
+
+/** The sign-in a CLI holds on this computer, read from its local files. */
+export interface CliAccount {
+  email: string
+  plan: string
 }
 
 export type QuotaKind = 'fiveHour' | 'weekly' | 'monthly' | 'scoped' | 'credits'
@@ -202,6 +213,10 @@ export interface Instance {
   profileDir: string | null
   profileExists: boolean
   usage: UsageEntry | null
+  /** Where the usage comes from (null = none): the app's own sign-in or a linked CLI. */
+  usageKind: UsageKind | null
+  /** The CLI this instance may be linked to (apps without usage of their own). */
+  cliChoice: UsageKind | null
   /** Organisations shown by default: the instance's own pick, else the ones no other instance
    *  signed in to the same account already stands for (decided by the launcher). */
   shownOrgs: string[]

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use chrono::Utc;
 use serde::Serialize;
 
-use crate::adapter::{Ctx, Registry};
+use crate::adapter::{Ctx, Registry, UsageKind};
 use crate::adapters::chromium::BROWSERS;
 use crate::adapters::webapp::{is_auto_ai, pwa_install, PRESETS};
 use crate::env::{normalize_path, Env};
@@ -310,6 +310,29 @@ pub fn physical_profile_dir(data: &StoreFile, reg: &Registry, env: &Env, inst: &
     Some(adapter.resolve_profile_dir(install, &logical, env))
 }
 
+/// The command-line sign-in an instance may be linked to for its usage (ChatGPT ↔ Codex,
+/// Grok ↔ Grok CLI, Gemini ↔ Antigravity). None for apps that read usage from their own
+/// profile, and for every other app.
+pub fn cli_choice(data: &StoreFile, reg: &Registry, inst: &Instance) -> Option<UsageKind> {
+    let install = data.installations.iter().find(|i| i.id == inst.installation_id)?;
+    let adapter = reg.get(&install.adapter)?;
+    if adapter.usage(install).is_some() {
+        return None;
+    }
+    UsageKind::cli_for_logo(&adapter.brand(install).logo)
+}
+
+/// Where an instance's usage comes from: the app's own sign-in in its profile folder, or the
+/// command-line sign-in the user linked to it (only the one that matches the app).
+pub fn usage_kind(data: &StoreFile, reg: &Registry, inst: &Instance) -> Option<UsageKind> {
+    let install = data.installations.iter().find(|i| i.id == inst.installation_id)?;
+    let own = reg.get(&install.adapter)?.usage(install);
+    own.or_else(|| {
+        let linked = UsageKind::from_cli_id(inst.advanced.usage_source.as_deref()?)?;
+        (cli_choice(data, reg, inst) == Some(linked)).then_some(linked)
+    })
+}
+
 /// Remember a profile folder so the next scan does not offer it again (instance removed but
 /// its data kept).
 pub fn forget_profile(data: &mut StoreFile, env: &Env, inst: &Instance) {
@@ -432,6 +455,18 @@ mod tests {
         let p2 = reg.get("webapp").unwrap().launch_plan(&gi, &extra, &c2).unwrap();
         assert!(p2.args.iter().any(|a| a == "--app=https://gemini.google.com/app"));
         assert!(p2.args[0].starts_with("--user-data-dir="));
+
+        // Usage from a CLI sign-in: only the matching CLI, and only when the user linked it.
+        assert_eq!(cli_choice(&data, &reg, gemini), Some(UsageKind::Antigravity));
+        assert_eq!(usage_kind(&data, &reg, gemini), None, "never linked automatically");
+        let mut linked = gemini.clone();
+        linked.advanced.usage_source = Some("agy".into());
+        assert_eq!(usage_kind(&data, &reg, &linked), Some(UsageKind::Antigravity));
+        linked.advanced.usage_source = Some("codex".into());
+        assert_eq!(usage_kind(&data, &reg, &linked), None, "a CLI of another app does not count");
+        let claude_default = data.instances.iter().find(|i| i.installation_id == "claude:classic").unwrap();
+        assert_eq!(cli_choice(&data, &reg, claude_default), None, "apps with their own usage offer no CLI");
+        assert_eq!(usage_kind(&data, &reg, claude_default), Some(UsageKind::ClaudeDesktop));
 
         // Second sync is stable.
         let r2 = sync(&mut data, &reg, &e);

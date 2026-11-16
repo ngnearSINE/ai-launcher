@@ -136,6 +136,11 @@ pub struct InstanceAdvanced {
     /// Which organisations of the signed-in account to show (empty = all).
     #[serde(default)]
     pub usage_orgs: Vec<String>,
+    /// A command-line sign-in the user linked as this instance's usage (`codex`, `grok`, `agy`),
+    /// for apps without usage of their own. Only the CLI that matches the app counts
+    /// (`UsageKind::cli_for_logo`); nothing is linked automatically.
+    #[serde(default)]
+    pub usage_source: Option<String>,
     /// Hide from the floating launcher / tray list without deleting.
     #[serde(default)]
     pub hidden_in_quick: bool,
@@ -152,6 +157,7 @@ impl Default for InstanceAdvanced {
             relaunch_through_launcher: Tristate::Inherit,
             usage_enabled: Tristate::Inherit,
             usage_orgs: Vec::new(),
+            usage_source: None,
             hidden_in_quick: false,
             hidden_in_float: false,
         }

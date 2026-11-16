@@ -68,6 +68,11 @@ pub struct InstanceView {
     pub usage: Option<UsageEntry>,
     /// Organisations shown by default (see `usage::shown_orgs`), in report order.
     pub shown_orgs: Vec<String>,
+    /// Where this instance's usage comes from: its app's own sign-in, or the CLI the user
+    /// linked (`codexCli`, `grokCli`, `antigravity`). None when it has no usage.
+    pub usage_kind: Option<UsageKind>,
+    /// The CLI sign-in this instance may be linked to, for apps without usage of their own.
+    pub cli_choice: Option<UsageKind>,
     pub app_id: String,
     /// Separation was turned off but this app can only rejoin its group after a restart.
     pub taskbar_needs_restart: bool,
@@ -130,6 +135,8 @@ pub fn build(core: &Core) -> Snapshot {
                 profile_dir: dir.map(|d| d.display().to_string()),
                 usage: usage.get(&inst.id).cloned(),
                 shown_orgs: crate::usage::shown_orgs(&data.instances, &usage, &inst.id),
+                usage_kind: launcher_core::catalog::usage_kind(data, &core.registry, inst),
+                cli_choice: launcher_core::catalog::cli_choice(data, &core.registry, inst),
                 app_id: format!("AiLauncher.{}", inst.id),
                 taskbar_needs_restart: restart.contains(&inst.id),
                 instance: inst.clone(),
